@@ -42,10 +42,10 @@ function App() {
   const t = translations[lang];
 
   const [clientId] = useState(() => {
-    let id = localStorage.getItem('zen_client_id');
+    let id = sessionStorage.getItem('zen_client_id');
     if (!id) {
       id = generateId();
-      localStorage.setItem('zen_client_id', id);
+      sessionStorage.setItem('zen_client_id', id);
     }
     return id;
   });
