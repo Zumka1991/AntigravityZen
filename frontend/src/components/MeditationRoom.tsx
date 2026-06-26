@@ -105,9 +105,8 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
   // Audio player synchronization
   useEffect(() => {
-    if (isPlaying && roomState.activeTrack) {
-      const track = roomState.activeTrack;
-      
+    const track = roomState.activeTrack;
+    if (isPlaying && track) {
       // Calculate current elapsed time on server using our stable offset
       const currentServerTime = Date.now() + serverOffsetRef.current;
       const elapsedMs = currentServerTime - roomState.startedAt;
@@ -153,7 +152,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         audioRef.current.pause();
       }
     };
-  }, [isPlaying, roomState.activeTrack, roomState.startedAt, roomState.duration]);
+  }, [isPlaying, roomState.activeTrack?.id, roomState.startedAt, roomState.duration]);
 
   // Handle mute/unmute
   useEffect(() => {
@@ -172,7 +171,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         setSelectedDuration(roomState.duration);
       }
     }
-  }, [roomState.activeTrack, roomState.duration, isPlaying]);
+  }, [roomState.activeTrack?.id, roomState.duration, isPlaying]);
 
   // Real-time animation loop for remaining time & breathing visualizer
   useEffect(() => {
@@ -228,12 +227,22 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   };
 
   const forcePlayAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.play()
-        .then(() => {
-          setAutoplayBlocked(false);
-        })
-        .catch(err => console.error("Force play failed:", err));
+    if (audioRef.current && roomState.startedAt) {
+      const currentServerTime = Date.now() + serverOffsetRef.current;
+      const elapsedMs = currentServerTime - roomState.startedAt;
+      const elapsedSeconds = Math.max(0, elapsedMs / 1000);
+
+      try {
+        audioRef.current.load();
+        audioRef.current.currentTime = elapsedSeconds;
+        audioRef.current.play()
+          .then(() => {
+            setAutoplayBlocked(false);
+          })
+          .catch(err => console.error("Force play failed:", err));
+      } catch (err) {
+        console.error("Error reloading and playing audio:", err);
+      }
     }
   };
 
