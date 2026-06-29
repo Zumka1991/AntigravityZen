@@ -53,7 +53,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [selectedTrackId, setSelectedTrackId] = useState(roomState.activeTrack?.id || tracks[0]?.id || '');
   const [selectedDuration, setSelectedDuration] = useState(roomState.duration || 60);
 
-  const standardDurations = [30, 60, 300, 600, 900, 1200];
+  const standardDurations = [30, 60, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200];
   const durationOptions = [...standardDurations];
   if (!durationOptions.includes(selectedDuration)) {
     durationOptions.push(selectedDuration);
@@ -67,6 +67,11 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     if (seconds === 600) return t.minutes10;
     if (seconds === 900) return t.minutes15;
     if (seconds === 1200) return t.minutes20;
+    if (seconds === 1800) return t.minutes30;
+    if (seconds === 2700) return t.minutes45;
+    if (seconds === 3600) return t.hour1;
+    if (seconds === 5400) return t.hour1_5;
+    if (seconds === 7200) return t.hour2;
     
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;

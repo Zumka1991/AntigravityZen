@@ -42,6 +42,24 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
+  const formatDurationText = (seconds: number) => {
+    if (seconds < 60) {
+      return `${seconds}${t.durationSeconds}`;
+    }
+    const mins = Math.floor(seconds / 60);
+    const hrText = t.durationMinutes === 'мин' ? 'ч' : 'h';
+    const minText = t.durationMinutes === 'мин' ? 'мин' : 'm';
+    
+    if (mins >= 60) {
+      const hours = Math.floor(mins / 60);
+      const remainingMins = mins % 60;
+      return remainingMins > 0 
+        ? `${hours} ${hrText} ${remainingMins} ${minText}`
+        : `${hours} ${hrText}`;
+    }
+    return `${mins} ${t.durationMinutes}`;
+  };
+
   // Stop audio when modal closes or component unmounts
   React.useEffect(() => {
     if (!showCreateModal) {
@@ -211,21 +229,21 @@ export const RoomList: React.FC<RoomListProps> = ({
               </div>
 
               <div className="form-group">
-                <label>{t.durationLabel}: {duration / 60} {t.durationMinutes} ({duration}{t.durationSeconds})</label>
+                <label>{t.durationLabel}: {formatDurationText(duration)} ({duration}{t.durationSeconds})</label>
                 <input
                   type="range"
                   min="30"
-                  max="1200"
+                  max="7200"
                   step="30"
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
                   style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                  <span>30{t.durationSeconds}</span>
-                  <span>5{t.durationMinutes}</span>
-                  <span>10{t.durationMinutes}</span>
-                  <span>20{t.durationMinutes}</span>
+                <div style={{ position: 'relative', height: '1.2rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '0.2rem' }}>
+                  <span style={{ position: 'absolute', left: '0%' }}>30{t.durationSeconds}</span>
+                  <span style={{ position: 'absolute', left: '25%', transform: 'translateX(-50%)' }}>30{t.durationMinutes}</span>
+                  <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>1{t.durationMinutes === 'мин' ? 'ч' : 'h'}</span>
+                  <span style={{ position: 'absolute', right: '0%' }}>2{t.durationMinutes === 'мин' ? 'ч' : 'h'}</span>
                 </div>
               </div>
 
