@@ -262,65 +262,66 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     <div className="room-grid">
       {/* Meditation Center Area */}
       <div className="glass-panel meditation-center">
-        {/* Top left controls (Leave and Invite Link) */}
-        <div style={{ position: 'absolute', top: '1.25rem', left: '1.25rem', display: 'flex', gap: '0.75rem', zIndex: 15 }}>
-          <button 
-            className="btn btn-secondary" 
-            onClick={onLeaveRoom} 
-            style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-            {t.leaveRoom}
-          </button>
-          
-          <button 
-            className="btn btn-primary" 
-            onClick={handleCopyLink} 
-            style={{ 
-              padding: '0.5rem 1rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.35rem',
-              background: copied ? 'rgba(45, 212, 191, 0.2)' : 'var(--color-primary)',
-              border: copied ? '1px solid var(--color-secondary)' : 'none',
-              color: copied ? 'var(--color-secondary)' : '#06050e',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            {copied ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {t.linkCopied}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                {t.copyLink}
-              </>
-            )}
-          </button>
-        </div>
+        {/* Top bar controls */}
+        <div className="room-top-bar">
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={onLeaveRoom} 
+              style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              {t.leaveRoom}
+            </button>
+            
+            <button 
+              className="btn btn-primary" 
+              onClick={handleCopyLink} 
+              style={{ 
+                padding: '0.5rem 1rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.35rem',
+                background: copied ? 'rgba(45, 212, 191, 0.2)' : 'var(--color-primary)',
+                border: copied ? '1px solid var(--color-secondary)' : 'none',
+                color: copied ? 'var(--color-secondary)' : '#06050e',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {copied ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  {t.linkCopied}
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                  {t.copyLink}
+                </>
+              )}
+            </button>
+          </div>
 
-        {/* Top right mute button (only shown when playing) */}
-        {isPlaying && (
-          <button
-            className="btn btn-secondary"
-            onClick={() => setIsMuted(!isMuted)}
-            style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem', zIndex: 15 }}
-          >
-            {isMuted ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-                {t.unmuteAudio}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                {t.muteAudio}
-              </>
-            )}
-          </button>
-        )}
+          {isPlaying && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsMuted(!isMuted)}
+              style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              {isMuted ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                  {t.unmuteAudio}
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                  {t.muteAudio}
+                </>
+              )}
+            </button>
+          )}
+        </div>
 
         {/* Meditation Player Active State */}
         {isPlaying ? (
