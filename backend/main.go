@@ -2,10 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"meditation-app/room"
 )
@@ -15,6 +20,7 @@ func main() {
 	go hub.Run()
 
 	room.InitTracks()
+	os.MkdirAll("./uploads", 0755)
 
 	authManager := room.NewAuthManager("users.json")
 	authManager.EnsureAdminCreated("Pifagor1991GG")
@@ -34,6 +40,9 @@ func main() {
 			next.ServeHTTP(w, r)
 		})
 	}
+
+	// Static server for uploaded tracks
+	http.Handle("/uploads/", enableCORS(http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads")))))
 
 	// Tracks endpoint (GET to list, POST to add, DELETE to delete)
 	http.Handle("/api/tracks", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,20 +68,67 @@ func main() {
 				return
 			}
 
-			var payload struct {
-				Title    string `json:"title"`
-				Artist   string `json:"artist"`
-				AudioURL string `json:"audioUrl"`
-				Duration int    `json:"duration"`
-			}
-
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+			// Parse multipart form up to 50 MB
+			err := r.ParseMultipartForm(50 << 20)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "File size exceeds limit or invalid form data"})
 				return
 			}
 
-			newTrack, err := room.AddTrack(payload.Title, payload.Artist, payload.AudioURL, payload.Duration)
+			title := r.FormValue("title")
+			artist := r.FormValue("artist")
+			durationStr := r.FormValue("duration")
+
+			durationNum, err := strconv.Atoi(durationStr)
+			if err != nil || durationNum <= 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Duration must be a positive number"})
+				return
+			}
+
+			file, handler, err := r.FormFile("file")
 			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Missing file parameter"})
+				return
+			}
+			defer file.Close()
+
+			// Sanitize filename to prevent directory traversal
+			cleanFilename := filepath.Base(handler.Filename)
+			// Generate unique name
+			uniqueFilename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), cleanFilename)
+			uploadPath := filepath.Join("./uploads", uniqueFilename)
+
+			// Save file
+			dst, err := os.Create(uploadPath)
+			if err != nil {
+				log.Printf("Failed to create file: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save file on server"})
+				return
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, file); err != nil {
+				log.Printf("Failed to copy file: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to write file on server"})
+				return
+			}
+
+			// URL to access the uploaded file
+			audioURL := fmt.Sprintf("http://%s/uploads/%s", r.Host, uniqueFilename)
+
+			newTrack, err := room.AddTrack(title, artist, audioURL, durationNum)
+			if err != nil {
+				os.Remove(uploadPath) // Clean up
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -104,12 +160,28 @@ func main() {
 				return
 			}
 
+			// Find track first to delete its file from uploads folder
+			track := room.FindTrack(trackID)
+			var fileToDelete string
+			if track != nil {
+				if strings.Contains(track.AudioURL, "/uploads/") {
+					parts := strings.Split(track.AudioURL, "/uploads/")
+					if len(parts) > 1 {
+						fileToDelete = filepath.Join("./uploads", parts[1])
+					}
+				}
+			}
+
 			err := room.DeleteTrack(trackID)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
+			}
+
+			if fileToDelete != "" {
+				os.Remove(fileToDelete) // delete from disk
 			}
 
 			w.Header().Set("Content-Type", "application/json")

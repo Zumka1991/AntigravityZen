@@ -29,9 +29,10 @@ function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [trackTitle, setTrackTitle] = useState('');
   const [trackArtist, setTrackArtist] = useState('');
-  const [trackUrl, setTrackUrl] = useState('');
+  const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('zen_lang');
@@ -317,19 +318,26 @@ function App() {
       return;
     }
 
+    if (!trackFile) {
+      setAdminError('Please select an audio file to upload');
+      return;
+    }
+
+    setIsUploading(true);
+
+    const formData = new FormData();
+    formData.append('title', trackTitle);
+    formData.append('artist', trackArtist);
+    formData.append('duration', durationNum.toString());
+    formData.append('file', trackFile);
+
     try {
       const res = await fetch(`${API_BASE}/tracks`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          title: trackTitle,
-          artist: trackArtist,
-          audioUrl: trackUrl,
-          duration: durationNum
-        })
+        body: formData
       });
 
       if (!res.ok) {
@@ -341,11 +349,17 @@ function App() {
       fetchTracks();
       setTrackTitle('');
       setTrackArtist('');
-      setTrackUrl('');
+      setTrackFile(null);
       setTrackDuration('');
+      
+      const fileInput = document.getElementById('admin-track-file') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
     } catch (err) {
       console.error('Failed to add track:', err);
       setAdminError('Failed to add track due to server connection error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -756,6 +770,7 @@ function App() {
                   value={trackTitle}
                   onChange={(e) => setTrackTitle(e.target.value)}
                   required
+                  disabled={isUploading}
                   style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
                 />
               </div>
@@ -770,20 +785,26 @@ function App() {
                   value={trackArtist}
                   onChange={(e) => setTrackArtist(e.target.value)}
                   required
+                  disabled={isUploading}
                   style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                  {t.trackUrlLabel}
+                  {t.trackFileLabel}
                 </label>
                 <input
-                  type="url"
-                  placeholder={t.trackUrlPlaceholder}
-                  value={trackUrl}
-                  onChange={(e) => setTrackUrl(e.target.value)}
+                  id="admin-track-file"
+                  type="file"
+                  accept="audio/mp3,audio/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setTrackFile(e.target.files[0]);
+                    }
+                  }}
                   required
+                  disabled={isUploading}
                   style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
                 />
               </div>
@@ -799,13 +820,30 @@ function App() {
                   onChange={(e) => setTrackDuration(e.target.value)}
                   required
                   min="1"
+                  disabled={isUploading}
                   style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.65rem', borderRadius: '12px', fontWeight: 700, height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {t.addTrackBtn}
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  disabled={isUploading}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.65rem', 
+                    borderRadius: '12px', 
+                    fontWeight: 700, 
+                    height: '38px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    background: isUploading ? 'var(--color-text-secondary)' : 'var(--color-primary)',
+                    cursor: isUploading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isUploading ? t.uploadingMsg : t.addTrackBtn}
                 </button>
               </div>
             </form>
