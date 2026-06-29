@@ -22,7 +22,6 @@ interface RoomListProps {
   rooms: RoomInfo[];
   tracks: Track[];
   username: string;
-  onSetUsername: (name: string) => void;
   onJoinRoom: (roomId: string) => void;
   onCreateRoom: (roomName: string, duration: number, trackId: string) => void;
   t: typeof translations.en;
@@ -32,7 +31,6 @@ export const RoomList: React.FC<RoomListProps> = ({
   rooms,
   tracks,
   username,
-  onSetUsername,
   onJoinRoom,
   onCreateRoom,
   t,
@@ -41,19 +39,6 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [roomName, setRoomName] = useState('');
   const [duration, setDuration] = useState(60);
   const [selectedTrackId, setSelectedTrackId] = useState(tracks[0]?.id || '');
-  const [isEditingUsername, setIsEditingUsername] = useState(false);
-  const [tempUsername, setTempUsername] = useState(username);
-
-  React.useEffect(() => {
-    setTempUsername(username);
-  }, [username]);
-
-  const handleSaveUsername = () => {
-    if (tempUsername.trim()) {
-      onSetUsername(tempUsername.trim());
-      setIsEditingUsername(false);
-    }
-  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,27 +71,10 @@ export const RoomList: React.FC<RoomListProps> = ({
           <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>{t.welcomeDesc}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {isEditingUsername ? (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                type="text"
-                value={tempUsername}
-                onChange={(e) => setTempUsername(e.target.value)}
-                style={{ padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
-                maxLength={20}
-              />
-              <button className="btn btn-primary" onClick={handleSaveUsername} style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}>{t.save}</button>
-              <button className="btn btn-secondary" onClick={() => { setTempUsername(username); setIsEditingUsername(false); }} style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}>{t.cancel}</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div className="user-badge">
-                <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-                <span>{username}</span>
-              </div>
-              <button className="btn btn-secondary" onClick={() => setIsEditingUsername(true)} style={{ padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.85rem' }}>{t.editName}</button>
-            </div>
-          )}
+          <div className="user-badge">
+            <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+            <span>{username}</span>
+          </div>
         </div>
       </div>
 

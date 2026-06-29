@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"meditation-app/room"
 )
@@ -12,6 +13,8 @@ import (
 func main() {
 	hub := room.NewHub()
 	go hub.Run()
+
+	authManager := room.NewAuthManager("users.json")
 
 	// CORS wrapper
 	enableCORS := func(next http.Handler) http.Handler {
@@ -68,17 +71,98 @@ func main() {
 		json.NewEncoder(w).Encode(rooms)
 	})))
 
+	// Register endpoint
+	http.Handle("/api/register", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		token, err := authManager.Register(payload.Username, payload.Password)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"username": strings.TrimSpace(payload.Username), "token": token})
+	})))
+
+	// Login endpoint
+	http.Handle("/api/login", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		token, err := authManager.Login(payload.Username, payload.Password)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		username, _ := authManager.ValidateToken(token)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"username": username, "token": token})
+	})))
+
+	// Verify session token endpoint
+	http.Handle("/api/verify", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		username, valid := authManager.ValidateToken(payload.Token)
+		if !valid {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]bool{"valid": false})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"valid": true, "username": username})
+	})))
+
 	// WebSocket upgrade endpoint
 	http.Handle("/ws", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		roomID := r.URL.Query().Get("roomId")
-		username := r.URL.Query().Get("username")
+		token := r.URL.Query().Get("token")
 		clientID := r.URL.Query().Get("clientId")
 		roomName := r.URL.Query().Get("roomName")
 		durationStr := r.URL.Query().Get("duration")
 		trackID := r.URL.Query().Get("trackId")
 
-		if roomID == "" || username == "" || clientID == "" {
-			http.Error(w, "Missing roomId, username, or clientId parameters", http.StatusBadRequest)
+		if roomID == "" || token == "" || clientID == "" {
+			http.Error(w, "Missing roomId, token, or clientId parameters", http.StatusBadRequest)
+			return
+		}
+
+		username, valid := authManager.ValidateToken(token)
+		if !valid {
+			http.Error(w, "Unauthorized session", http.StatusUnauthorized)
 			return
 		}
 

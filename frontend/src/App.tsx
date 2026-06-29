@@ -5,16 +5,6 @@ import { MeditationRoom } from './components/MeditationRoom';
 import { translations } from './translations';
 import type { Language } from './translations';
 
-// Random username helper
-const generateRandomName = () => {
-  const adjectives = ['Calm', 'Serene', 'Mindful', 'Peaceful', 'Quiet', 'Silent', 'Gentle', 'Placid'];
-  const nouns = ['Lotus', 'River', 'Forest', 'Cloud', 'Mountain', 'Zen', 'Breeze', 'Ocean'];
-  const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-  const randomNum = Math.floor(Math.random() * 900) + 100;
-  return `${randomAdj}${randomNoun}${randomNum}`;
-};
-
 // Generate UUID-like string
 const generateId = () => {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -25,9 +15,16 @@ const API_BASE = `http://${hostname}:8080/api`;
 const WS_BASE = `ws://${hostname}:8080/ws`;
 
 function App() {
-  const [username, setUsername] = useState(() => {
-    return localStorage.getItem('zen_username') || generateRandomName();
-  });
+  const [token, setToken] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
+  const [isCheckingToken, setIsCheckingToken] = useState(true);
+  
+  // Auth Form States
+  const [showLogin, setShowLogin] = useState(true);
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('zen_lang');
     if (saved === 'ru' || saved === 'en') return saved;
@@ -60,14 +57,49 @@ function App() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Sync username to localStorage
-  const handleSetUsername = (name: string) => {
-    setUsername(name);
-    localStorage.setItem('zen_username', name);
-  };
+  // Verify token on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('zen_token');
+    if (!savedToken) {
+      setIsCheckingToken(false);
+      return;
+    }
 
-  // Fetch initial tracks and rooms
+    const verifyToken = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: savedToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.valid) {
+            setToken(savedToken);
+            setUsername(data.username);
+          } else {
+            localStorage.removeItem('zen_token');
+            localStorage.removeItem('zen_username');
+          }
+        } else {
+          localStorage.removeItem('zen_token');
+          localStorage.removeItem('zen_username');
+        }
+      } catch (err) {
+        console.error('Failed to verify token:', err);
+        localStorage.removeItem('zen_token');
+        localStorage.removeItem('zen_username');
+      } finally {
+        setIsCheckingToken(false);
+      }
+    };
+
+    verifyToken();
+  }, []);
+
+  // Fetch initial tracks and rooms when logged in
   const fetchRooms = async () => {
+    if (!token) return;
     try {
       const res = await fetch(`${API_BASE}/rooms`);
       if (res.ok) {
@@ -80,6 +112,7 @@ function App() {
   };
 
   const fetchTracks = async () => {
+    if (!token) return;
     try {
       const res = await fetch(`${API_BASE}/tracks`);
       if (res.ok) {
@@ -97,13 +130,13 @@ function App() {
     const roomIdParam = params.get('roomId');
     if (roomIdParam) {
       setActiveRoom({ id: roomIdParam, name: null });
-      // Clean up the URL query param so refreshing doesn't force re-joining after leaving
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
     }
   }, []);
 
   useEffect(() => {
+    if (!token) return;
     fetchTracks();
     fetchRooms();
 
@@ -115,11 +148,11 @@ function App() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeRoom]);
+  }, [activeRoom, token]);
 
   // Connect to websocket when in room
   useEffect(() => {
-    if (!activeRoom) {
+    if (!activeRoom || !token) {
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -132,7 +165,7 @@ function App() {
     try {
       const durationParam = activeRoom.duration ? `&duration=${activeRoom.duration}` : '';
       const trackParam = activeRoom.trackId ? `&trackId=${activeRoom.trackId}` : '';
-      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&username=${encodeURIComponent(username)}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}`;
+      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -142,7 +175,6 @@ function App() {
       };
 
       ws.onmessage = (event) => {
-        // Multiple JSON messages can be separated by newlines
         const lines = event.data.split('\n');
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -187,6 +219,7 @@ function App() {
       console.error('Failed to create WebSocket:', err);
       setConnectionError(`Failed to establish connection: ${err.message || err}`);
       setActiveRoom(null);
+      setRoomState(null);
     }
 
     return () => {
@@ -194,20 +227,15 @@ function App() {
         wsRef.current.close();
       }
     };
-  }, [activeRoom, username, clientId]);
+  }, [activeRoom, token, clientId]);
 
   const handleJoinRoom = (roomId: string) => {
     setActiveRoom({ id: roomId, name: null });
   };
 
   const handleCreateRoom = (roomName: string, duration: number, trackId: string) => {
-    // Generate a unique room ID
     const roomId = generateId().slice(0, 8);
     setActiveRoom({ id: roomId, name: roomName, duration, trackId });
-
-    // We can also trigger the initial configuration if we are the host.
-    // The Hub automatically creates the room when the client connects.
-    // The client will establish connection in the useEffect hook.
   };
 
   const handleLeaveRoom = () => {
@@ -216,6 +244,58 @@ function App() {
     }
     setActiveRoom(null);
     fetchRooms();
+  };
+
+  // Auth operations
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    const endpoint = showLogin ? '/login' : '/register';
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: authUsername, password: authPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        let errorMsg = t.authErrorGeneric;
+        if (data.error) {
+          if (data.error.includes('taken')) {
+            errorMsg = t.authErrorTaken;
+          } else if (data.error.includes('password must be')) {
+            errorMsg = t.authErrorPasswordShort;
+          } else {
+            errorMsg = data.error;
+          }
+        }
+        setAuthError(errorMsg);
+        return;
+      }
+
+      localStorage.setItem('zen_token', data.token);
+      localStorage.setItem('zen_username', data.username);
+      setUsername(data.username);
+      setToken(data.token);
+      setAuthPassword('');
+      setAuthError(null);
+    } catch (err) {
+      console.error('Auth error:', err);
+      setAuthError(t.authErrorGeneric);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('zen_token');
+    localStorage.removeItem('zen_username');
+    setToken(null);
+    setUsername('');
+    setAuthUsername('');
+    setAuthPassword('');
+    setActiveRoom(null);
   };
 
   // Websocket actions
@@ -247,6 +327,141 @@ function App() {
       wsRef.current.send(JSON.stringify(msg));
     }
   };
+
+  if (isCheckingToken) {
+    return (
+      <div className="app-container">
+        <div className="glow-orb glow-purple" />
+        <div className="glow-orb glow-teal" />
+        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
+          <div className="brand-icon" style={{ width: '48px', height: '48px', animation: 'pulseLight 1s infinite alternate' }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}>
+        <div className="glow-orb glow-purple" />
+        <div className="glow-orb glow-teal" />
+        
+        <header className="app-header" style={{ borderBottom: 'none', marginBottom: '1.5rem', width: '100%', maxWidth: '400px', justifyContent: 'center' }}>
+          <div className="brand">
+            <div className="brand-icon" />
+            <span>Antigravity Zen</span>
+          </div>
+        </header>
+
+        <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem 2rem', position: 'relative', zIndex: 10 }}>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center', fontFamily: 'var(--font-heading)' }}>
+            {showLogin ? t.loginTitle : t.registerTitle}
+          </h2>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginBottom: '2rem', textAlign: 'center' }}>
+            {t.welcomeDesc}
+          </p>
+
+          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                {t.usernameLabel}
+              </label>
+              <input
+                type="text"
+                placeholder={t.usernamePlaceholder}
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                required
+                style={{ padding: '0.75rem 1rem', borderRadius: '12px' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                {t.passwordLabel}
+              </label>
+              <input
+                type="password"
+                placeholder={t.passwordPlaceholder}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+                style={{ padding: '0.75rem 1rem', borderRadius: '12px' }}
+              />
+            </div>
+
+            {authError && (
+              <div style={{ color: 'var(--color-accent)', fontSize: '0.85rem', background: 'rgba(244, 63, 94, 0.05)', border: '1px solid rgba(244, 63, 94, 0.15)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center' }}>
+                {authError}
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary" style={{ padding: '0.85rem', borderRadius: '12px', marginTop: '0.5rem', fontWeight: 700, cursor: 'pointer' }}>
+              {showLogin ? t.signInBtn : t.signUpBtn}
+            </button>
+          </form>
+
+          <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>
+            <span>{showLogin ? t.noAccountPrompt : t.haveAccountPrompt} </span>
+            <button
+              className="btn"
+              onClick={() => {
+                setShowLogin(!showLogin);
+                setAuthError(null);
+                setAuthPassword('');
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                boxShadow: 'none',
+                color: 'var(--color-primary)',
+                padding: '0 0.25rem',
+                fontWeight: 600,
+                textDecoration: 'underline',
+                cursor: 'pointer'
+              }}
+            >
+              {showLogin ? t.signUpBtn : t.signInBtn}
+            </button>
+          </div>
+        </div>
+        
+        {/* Language Selector at the bottom of login */}
+        <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255, 255, 255, 0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)', marginTop: '2rem' }}>
+          <button 
+            className="btn" 
+            onClick={() => handleSetLang('ru')} 
+            style={{ 
+              padding: '0.35rem 0.65rem', 
+              fontSize: '0.75rem', 
+              borderRadius: '8px',
+              background: lang === 'ru' ? 'var(--color-primary)' : 'transparent',
+              color: lang === 'ru' ? '#06050e' : 'var(--color-text-secondary)',
+              boxShadow: lang === 'ru' ? '0 2px 10px var(--color-primary-glow)' : 'none',
+              fontWeight: 700
+            }}
+          >
+            RU
+          </button>
+          <button 
+            className="btn" 
+            onClick={() => handleSetLang('en')} 
+            style={{ 
+              padding: '0.35rem 0.65rem', 
+              fontSize: '0.75rem', 
+              borderRadius: '8px',
+              background: lang === 'en' ? 'var(--color-primary)' : 'transparent',
+              color: lang === 'en' ? '#06050e' : 'var(--color-text-secondary)',
+              boxShadow: lang === 'en' ? '0 2px 10px var(--color-primary-glow)' : 'none',
+              fontWeight: 700
+            }}
+          >
+            EN
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-container ${activeRoom ? 'in-room' : ''}`}>
@@ -294,10 +509,28 @@ function App() {
               EN
             </button>
           </div>
-          {!activeRoom && (
-            <div className="user-badge">
-              <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-              <span>{username}</span>
+          {!activeRoom && token && (
+            <div className="user-badge" style={{ gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+                <span>{username}</span>
+              </div>
+              <button 
+                className="btn" 
+                onClick={handleLogout}
+                style={{ 
+                  padding: '0.35rem 0.65rem', 
+                  fontSize: '0.75rem', 
+                  borderRadius: '8px',
+                  background: 'rgba(244, 63, 94, 0.1)',
+                  color: 'var(--color-accent)',
+                  border: '1px solid rgba(244, 63, 94, 0.2)',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.logoutBtn}
+              </button>
             </div>
           )}
         </div>
@@ -347,7 +580,6 @@ function App() {
             rooms={rooms}
             tracks={tracks}
             username={username}
-            onSetUsername={handleSetUsername}
             onJoinRoom={handleJoinRoom}
             onCreateRoom={handleCreateRoom}
             t={t}
