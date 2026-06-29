@@ -751,15 +751,7 @@ function App() {
             )}
 
             {/* Add Track Form */}
-            <form onSubmit={handleAddTrack} style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '1rem',
-              background: 'rgba(255, 255, 255, 0.02)',
-              padding: '1.5rem',
-              borderRadius: '16px',
-              border: '1px solid rgba(255, 255, 255, 0.04)'
-            }}>
+            <form onSubmit={handleAddTrack} className="admin-track-form">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackTitleLabel}
@@ -790,7 +782,7 @@ function App() {
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
+              <div className="span-2" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackFileLabel}
                 </label>
