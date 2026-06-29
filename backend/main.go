@@ -124,7 +124,7 @@ func main() {
 			}
 
 			// URL to access the uploaded file
-			audioURL := fmt.Sprintf("http://%s/uploads/%s", r.Host, uniqueFilename)
+			audioURL := fmt.Sprintf("/uploads/%s", uniqueFilename)
 
 			newTrack, err := room.AddTrack(title, artist, audioURL, durationNum)
 			if err != nil {

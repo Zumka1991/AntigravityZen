@@ -11,8 +11,13 @@ const generateId = () => {
 };
 
 const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const API_BASE = `http://${hostname}:8080/api`;
-const WS_BASE = `ws://${hostname}:8080/ws`;
+const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+const apiProtocol = isSecure ? 'https:' : 'http:';
+const wsProtocol = isSecure ? 'wss:' : 'ws:';
+const port = typeof window !== 'undefined' && window.location.port ? `:${window.location.port}` : '';
+
+const API_BASE = `${apiProtocol}//${hostname}${port}/api`;
+const WS_BASE = `${wsProtocol}//${hostname}${port}/ws`;
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
