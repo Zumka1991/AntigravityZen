@@ -25,6 +25,14 @@ function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Admin Panel States
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [trackTitle, setTrackTitle] = useState('');
+  const [trackArtist, setTrackArtist] = useState('');
+  const [trackUrl, setTrackUrl] = useState('');
+  const [trackDuration, setTrackDuration] = useState('');
+  const [adminError, setAdminError] = useState<string | null>(null);
+
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('zen_lang');
     if (saved === 'ru' || saved === 'en') return saved;
@@ -298,6 +306,72 @@ function App() {
     setActiveRoom(null);
   };
 
+  // Admin Operations
+  const handleAddTrack = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError(null);
+
+    const durationNum = parseInt(trackDuration);
+    if (isNaN(durationNum) || durationNum <= 0) {
+      setAdminError('Duration must be a positive number');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/tracks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: trackTitle,
+          artist: trackArtist,
+          audioUrl: trackUrl,
+          duration: durationNum
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setAdminError(data.error || 'Failed to add track');
+        return;
+      }
+
+      fetchTracks();
+      setTrackTitle('');
+      setTrackArtist('');
+      setTrackUrl('');
+      setTrackDuration('');
+    } catch (err) {
+      console.error('Failed to add track:', err);
+      setAdminError('Failed to add track due to server connection error');
+    }
+  };
+
+  const handleDeleteTrack = async (id: string) => {
+    setAdminError(null);
+    try {
+      const res = await fetch(`${API_BASE}/tracks?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setAdminError(data.error || 'Failed to delete track');
+        return;
+      }
+
+      fetchTracks();
+    } catch (err) {
+      console.error('Failed to delete track:', err);
+      setAdminError('Failed to delete track due to server connection error');
+    }
+  };
+
   // Websocket actions
   const handleSendMessage = (text: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -509,6 +583,24 @@ function App() {
               EN
             </button>
           </div>
+          {!activeRoom && token && username === 'admin' && (
+            <button 
+              className="btn" 
+              onClick={() => setShowAdminPanel(true)}
+              style={{ 
+                padding: '0.35rem 0.65rem', 
+                fontSize: '0.75rem', 
+                borderRadius: '8px',
+                background: 'rgba(167, 139, 250, 0.1)',
+                color: 'var(--color-primary)',
+                border: '1px solid rgba(167, 139, 250, 0.2)',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              {t.adminAccessBtn}
+            </button>
+          )}
           {!activeRoom && token && (
             <div className="user-badge" style={{ gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -586,6 +678,188 @@ function App() {
           />
         )}
       </main>
+
+      {/* Admin Panel Modal Overlay */}
+      {showAdminPanel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 4, 15, 0.75)',
+          backdropFilter: 'blur(15px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 100,
+          padding: '1.5rem'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '650px',
+            padding: '2.5rem',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2rem',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
+                {t.adminPanelTitle}
+              </h2>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setShowAdminPanel(false);
+                  setAdminError(null);
+                }}
+                style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}
+              >
+                {t.closeBtn}
+              </button>
+            </div>
+
+            {adminError && (
+              <div style={{
+                color: 'var(--color-accent)',
+                background: 'rgba(244, 63, 94, 0.05)',
+                border: '1px solid rgba(244, 63, 94, 0.15)',
+                padding: '0.75rem 1rem',
+                borderRadius: '10px',
+                fontSize: '0.9rem',
+                textAlign: 'center'
+              }}>
+                {adminError}
+              </div>
+            )}
+
+            {/* Add Track Form */}
+            <form onSubmit={handleAddTrack} style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '1rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: '1.5rem',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.04)'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  {t.trackTitleLabel}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t.trackTitlePlaceholder}
+                  value={trackTitle}
+                  onChange={(e) => setTrackTitle(e.target.value)}
+                  required
+                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  {t.trackArtistLabel}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t.trackArtistPlaceholder}
+                  value={trackArtist}
+                  onChange={(e) => setTrackArtist(e.target.value)}
+                  required
+                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  {t.trackUrlLabel}
+                </label>
+                <input
+                  type="url"
+                  placeholder={t.trackUrlPlaceholder}
+                  value={trackUrl}
+                  onChange={(e) => setTrackUrl(e.target.value)}
+                  required
+                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  {t.trackDurationLabel}
+                </label>
+                <input
+                  type="number"
+                  placeholder={t.trackDurationPlaceholder}
+                  value={trackDuration}
+                  onChange={(e) => setTrackDuration(e.target.value)}
+                  required
+                  min="1"
+                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.65rem', borderRadius: '12px', fontWeight: 700, height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {t.addTrackBtn}
+                </button>
+              </div>
+            </form>
+
+            {/* Track List Manager */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{t.backgroundSoundSetting}</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                {tracks.length === 0 ? (
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem' }}>
+                    {t.noTracksMsg}
+                  </p>
+                ) : (
+                  tracks.map((track) => (
+                    <div key={track.id} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.04)'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{(t as any)[track.id] || track.title}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                          {track.artist} • {Math.floor(track.duration / 60)}m {track.duration % 60}s
+                        </div>
+                      </div>
+                      <button 
+                        className="btn" 
+                        onClick={() => handleDeleteTrack(track.id)}
+                        style={{
+                          padding: '0.35rem 0.65rem',
+                          fontSize: '0.8rem',
+                          borderRadius: '8px',
+                          background: 'rgba(244, 63, 94, 0.1)',
+                          color: 'var(--color-accent)',
+                          border: '1px solid rgba(244, 63, 94, 0.2)',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {t.deleteTrackBtn}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

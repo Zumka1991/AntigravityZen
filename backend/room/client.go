@@ -3,7 +3,12 @@ package room
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -198,40 +203,170 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 	}
 }
 
-// Mock database of tracks for meditation
-var mockTracks = []Track{
-	{
-		ID:       "ambient-rain",
-		Title:    "Gentle Rain & Thunder",
-		Artist:   "Nature Sounds",
-		AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // Using public MP3 examples for test
-		Duration: 372,
-	},
-	{
-		ID:       "tibetan-bowls",
-		Title:    "Tibetan Singing Bowls Meditation",
-		Artist:   "Spirituality",
-		AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-		Duration: 423,
-	},
-	{
-		ID:       "deep-relaxation",
-		Title:    "Deep Sleep & Astral Relaxation",
-		Artist:   "Solitude Music",
-		AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-		Duration: 302,
-	},
+var (
+	tracksMutex sync.RWMutex
+	tracksList  []Track
+	tracksFile  = "tracks.json"
+)
+
+// InitTracks инициализирует список треков из файла tracks.json
+func InitTracks() {
+	tracksMutex.Lock()
+	defer tracksMutex.Unlock()
+
+	// Попытка загрузить из файла
+	data, err := os.ReadFile(tracksFile)
+	if err == nil {
+		if err := json.Unmarshal(data, &tracksList); err == nil && len(tracksList) > 0 {
+			log.Printf("Loaded %d tracks from %s", len(tracksList), tracksFile)
+			return
+		}
+	}
+
+	// Дефолтные треки, если файла нет или он пуст
+	tracksList = []Track{
+		{
+			ID:       "ambient-rain",
+			Title:    "Gentle Rain & Thunder",
+			Artist:   "Nature Sounds",
+			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+			Duration: 372,
+		},
+		{
+			ID:       "tibetan-bowls",
+			Title:    "Tibetan Singing Bowls Meditation",
+			Artist:   "Spirituality",
+			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+			Duration: 423,
+		},
+		{
+			ID:       "deep-relaxation",
+			Title:    "Deep Sleep & Astral Relaxation",
+			Artist:   "Solitude Music",
+			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+			Duration: 302,
+		},
+	}
+
+	// Сохранение дефолтных треков
+	saveTracksLocked()
+	log.Printf("Initialized default tracks in %s", tracksFile)
+}
+
+func saveTracksLocked() {
+	data, err := json.MarshalIndent(tracksList, "", "  ")
+	if err != nil {
+		log.Printf("Error encoding tracks: %v", err)
+		return
+	}
+	if err := os.WriteFile(tracksFile, data, 0644); err != nil {
+		log.Printf("Error writing tracks to file: %v", err)
+	}
 }
 
 func FindTrack(id string) *Track {
-	for _, t := range mockTracks {
+	tracksMutex.RLock()
+	defer tracksMutex.RUnlock()
+
+	for _, t := range tracksList {
 		if t.ID == id {
-			return &t
+			// Возвращаем копию, чтобы избежать race conditions при изменении полей
+			trackCopy := t
+			return &trackCopy
 		}
 	}
 	return nil
 }
 
 func GetTracks() []Track {
-	return mockTracks
+	tracksMutex.RLock()
+	defer tracksMutex.RUnlock()
+
+	// Возвращаем копию слайса
+	res := make([]Track, len(tracksList))
+	copy(res, tracksList)
+	return res
+}
+
+// AddTrack добавляет новый трек
+func AddTrack(title, artist, audioURL string, duration int) (Track, error) {
+	title = strings.TrimSpace(title)
+	artist = strings.TrimSpace(artist)
+	audioURL = strings.TrimSpace(audioURL)
+
+	if title == "" || artist == "" || audioURL == "" || duration <= 0 {
+		return Track{}, errors.New("invalid track metadata")
+	}
+
+	// Генерация ID на основе названия
+	id := strings.ToLower(title)
+	id = strings.ReplaceAll(id, " ", "-")
+	var cleanID []rune
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			cleanID = append(cleanID, r)
+		}
+	}
+	id = string(cleanID)
+	if id == "" {
+		id = "track-" + time.Now().Format("20060102150405")
+	}
+
+	tracksMutex.Lock()
+	defer tracksMutex.Unlock()
+
+	// Убедимся, что ID уникальный
+	baseID := id
+	counter := 1
+	for {
+		found := false
+		for _, t := range tracksList {
+			if t.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+		id = fmt.Sprintf("%s-%d", baseID, counter)
+		counter++
+	}
+
+	newTrack := Track{
+		ID:       id,
+		Title:    title,
+		Artist:   artist,
+		AudioURL: audioURL,
+		Duration: duration,
+	}
+
+	tracksList = append(tracksList, newTrack)
+	saveTracksLocked()
+
+	return newTrack, nil
+}
+
+// DeleteTrack удаляет трек по ID
+func DeleteTrack(id string) error {
+	tracksMutex.Lock()
+	defer tracksMutex.Unlock()
+
+	index := -1
+	for i, t := range tracksList {
+		if t.ID == id {
+			index = i
+			break
+		}
+	}
+
+	if index == -1 {
+		return errors.New("track not found")
+	}
+
+	// Удаление элемента из слайса
+	tracksList = append(tracksList[:index], tracksList[index+1:]...)
+	saveTracksLocked()
+
+	return nil
 }

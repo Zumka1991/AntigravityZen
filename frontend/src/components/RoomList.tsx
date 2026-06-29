@@ -39,6 +39,52 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [roomName, setRoomName] = useState('');
   const [duration, setDuration] = useState(60);
   const [selectedTrackId, setSelectedTrackId] = useState(tracks[0]?.id || '');
+  const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Stop audio when modal closes or component unmounts
+  React.useEffect(() => {
+    if (!showCreateModal) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setPreviewTrackId(null);
+    }
+  }, [showCreateModal]);
+
+  React.useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
+
+  const togglePreview = (track: Track, e: React.MouseEvent) => {
+    e.stopPropagation(); // Предотвращаем выбор трека при клике на прослушивание
+
+    if (previewTrackId === track.id) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setPreviewTrackId(null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
+      const audio = new Audio(track.audioUrl);
+      audio.volume = 0.5;
+      audioRef.current = audio;
+      audio.play().catch(err => console.error("Audio preview play failed:", err));
+      setPreviewTrackId(track.id);
+
+      audio.onended = () => {
+        setPreviewTrackId(null);
+      };
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,26 +133,28 @@ export const RoomList: React.FC<RoomListProps> = ({
           }
           setShowCreateModal(true);
         }}>
-          <span style={{ fontSize: '1.2rem', marginRight: '0.25rem' }}>+</span> {t.createRoomBtn}
+          {t.createRoomBtn}
         </button>
       </div>
 
       {/* Rooms Grid */}
       {rooms.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-          <p style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>{t.noActiveRooms}</p>
-          <p style={{ fontSize: '0.9rem' }}>{t.firstRoomPrompt}</p>
+        <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          </div>
+          <div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '0.25rem' }}>{t.noActiveRooms}</h3>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>{t.firstRoomPrompt}</p>
+          </div>
         </div>
       ) : (
         <div className="rooms-grid">
           {rooms.map((room) => (
-            <div key={room.id} className="glass-panel room-card">
+            <div key={room.id} className="room-card glass-panel">
               <div className="room-card-header">
-                <div>
-                  <h3>{room.name}</h3>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>ID: {room.id}</span>
-                </div>
-                <span className={`badge-status ${room.status}`}>
+                <h3>{room.name}</h3>
+                <span className={`status-badge ${room.status}`}>
                   {getStatusText(room.status)}
                 </span>
               </div>
@@ -194,9 +242,41 @@ export const RoomList: React.FC<RoomListProps> = ({
                         <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{getTrackTitle(track)}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>{track.artist}</div>
                       </div>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                        {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={(e) => togglePreview(track, e)}
+                          style={{
+                            padding: '0.25rem 0.5rem',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            background: previewTrackId === track.id ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.05)',
+                            color: '#fff',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          {previewTrackId === track.id ? (
+                            <>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                              <span>{t.stopPreviewBtn}</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+                              <span>{t.previewBtn}</span>
+                            </>
+                          )}
+                        </button>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                          {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>

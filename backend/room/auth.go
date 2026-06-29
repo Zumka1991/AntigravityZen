@@ -149,6 +149,33 @@ func (am *AuthManager) Logout(token string) {
 	delete(am.sessions, token)
 }
 
+// EnsureAdminCreated проверяет наличие пользователя admin и создает его с паролем по умолчанию, если его нет
+func (am *AuthManager) EnsureAdminCreated(defaultPassword string) {
+	key := "admin"
+
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	if _, exists := am.users[key]; exists {
+		return
+	}
+
+	salt := generateSalt()
+	hash := hashPassword(defaultPassword, salt)
+
+	am.users[key] = StoredUser{
+		Username:     "admin",
+		PasswordHash: hash,
+		Salt:         salt,
+	}
+
+	if err := am.saveUsers(); err != nil {
+		log.Printf("Error creating default admin user: %v", err)
+	} else {
+		log.Println("Default admin user created successfully")
+	}
+}
+
 // Вспомогательные функции для криптографии
 
 func generateSalt() string {

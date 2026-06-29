@@ -16,4 +16,5 @@ logs/
 
 # Database files
 backend/users.json
+backend/tracks.json
 
