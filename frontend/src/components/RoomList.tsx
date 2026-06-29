@@ -229,7 +229,7 @@ export const RoomList: React.FC<RoomListProps> = ({
               </div>
 
               <div className="form-group">
-                <label>{t.durationLabel}: {formatDurationText(duration)} ({duration}{t.durationSeconds})</label>
+                <label>{t.durationLabel}: {formatDurationText(duration)}</label>
                 <input
                   type="range"
                   min="30"
