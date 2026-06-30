@@ -721,14 +721,14 @@ input[type="range"]:focus {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at center, rgba(8, 7, 20, 0.2) 0%, rgba(8, 7, 20, 0.56) 74%),
-    linear-gradient(180deg, rgba(8, 7, 20, 0.56) 0%, rgba(8, 7, 20, 0.2) 35%, rgba(8, 7, 20, 0.7) 100%);
-  backdrop-filter: saturate(0.82);
+    radial-gradient(circle at center, rgba(8, 7, 20, 0.06) 0%, rgba(8, 7, 20, 0.28) 78%),
+    linear-gradient(180deg, rgba(8, 7, 20, 0.3) 0%, rgba(8, 7, 20, 0.06) 38%, rgba(8, 7, 20, 0.46) 100%);
+  backdrop-filter: saturate(1.08);
 }
 
 @keyframes meditationBackgroundReveal {
   to {
-    opacity: 0.62;
+    opacity: 0.88;
     transform: scale(1);
   }
 }
