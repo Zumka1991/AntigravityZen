@@ -451,8 +451,27 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const isPlaying = roomState.status === 'playing';
 
   // Configurable states for host before starting
+  const ambientTracks = tracks.filter(tr => !tr.ownerUsername);
+  const recordedTracks = tracks.filter(tr => !!tr.ownerUsername);
+
+  const [trackType, setTrackType] = useState<'ambient' | 'recorded'>('ambient');
   const [selectedTrackId, setSelectedTrackId] = useState(roomState.activeTrack?.id || tracks[0]?.id || '');
   const [selectedDuration, setSelectedDuration] = useState(roomState.duration || 60);
+
+  const handleTrackTypeChange = (type: 'ambient' | 'recorded') => {
+    setTrackType(type);
+    if (type === 'ambient') {
+      if (ambientTracks.length > 0) {
+        setSelectedTrackId(ambientTracks[0].id);
+      }
+    } else {
+      if (recordedTracks.length > 0) {
+        setSelectedTrackId(recordedTracks[0].id);
+      } else {
+        setSelectedTrackId('');
+      }
+    }
+  };
 
   const standardDurations = [30, 60, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200];
   const durationOptions = [...standardDurations];
@@ -948,13 +967,87 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
                     <div className="form-group" style={{ width: '100%' }}>
                       <label>{t.backgroundSoundSetting}</label>
-                      <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
-                        {tracks.map(tOption => (
-                          <option key={tOption.id} value={tOption.id}>
-                            {(t as any)[tOption.id] || tOption.title} ({Math.floor(tOption.duration/60)}m)
-                          </option>
-                        ))}
-                      </select>
+                      
+                      {/* Segmented Switcher */}
+                      <div style={{ 
+                        display: 'flex', 
+                        background: 'rgba(255, 255, 255, 0.03)', 
+                        border: '1px solid rgba(255, 255, 255, 0.05)', 
+                        borderRadius: '10px', 
+                        padding: '3px', 
+                        marginBottom: '0.75rem' 
+                      }}>
+                        <button 
+                          type="button"
+                          onClick={() => handleTrackTypeChange('ambient')}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: trackType === 'ambient' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                            color: trackType === 'ambient' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          🎵 {t.ambientSoundsTab}
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => handleTrackTypeChange('recorded')}
+                          style={{
+                            flex: 1,
+                            padding: '0.45rem',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: trackType === 'recorded' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                            color: trackType === 'recorded' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          🎙️ {t.myRecordingsTab}
+                        </button>
+                      </div>
+
+                      {/* Dropdown or Message */}
+                      {trackType === 'ambient' ? (
+                        <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
+                          {ambientTracks.map(tOption => (
+                            <option key={tOption.id} value={tOption.id}>
+                              {(t as any)[tOption.id] || tOption.title} ({Math.floor(tOption.duration/60)}m)
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        recordedTracks.length > 0 ? (
+                          <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
+                            {recordedTracks.map(tOption => (
+                              <option key={tOption.id} value={tOption.id}>
+                                {tOption.title} ({Math.floor(tOption.duration/60)}m {tOption.duration % 60}s)
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div style={{ 
+                            padding: '0.85rem', 
+                            background: 'rgba(255, 255, 255, 0.01)', 
+                            border: '1px dashed rgba(255, 255, 255, 0.1)', 
+                            borderRadius: '8px',
+                            fontSize: '0.8rem',
+                            color: 'var(--color-text-secondary)',
+                            textAlign: 'center',
+                            lineHeight: '1.4'
+                          }}>
+                            {t.noRecordingsMsg}
+                          </div>
+                        )
+                      )}
                     </div>
 
                     <button 

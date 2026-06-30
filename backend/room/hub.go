@@ -22,11 +22,12 @@ var upgrader = websocket.Upgrader{
 
 // Track represents a meditation music track
 type Track struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	AudioURL string `json:"audioUrl"`
-	Duration int    `json:"duration"` // in seconds
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Artist        string `json:"artist"`
+	AudioURL      string `json:"audioUrl"`
+	Duration      int    `json:"duration"` // in seconds
+	OwnerUsername string `json:"ownerUsername,omitempty"`
 }
 
 // Message sent over websocket
@@ -430,7 +431,7 @@ func (h *Hub) stopVoiceRecordingLocked(room *Room) {
 		}
 		go func() {
 			title := fmt.Sprintf("Guided Session - %s", roomName)
-			_, err := AddTrack(title, hostUsername, filePath, durationSec)
+			_, err := AddTrack(title, hostUsername, filePath, durationSec, hostUsername)
 			if err != nil {
 				log.Printf("Error registering recorded track: %v", err)
 			} else {

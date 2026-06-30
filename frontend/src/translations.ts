@@ -107,6 +107,10 @@ export const translations = {
     confirmBtn: 'Confirm',
     deviceDefaultLabel: 'Default Microphone',
     soundSettingsTitle: 'Sound Settings',
+    ambientSoundsTab: 'Ambient Sounds',
+    myRecordingsTab: 'My Recordings',
+    noRecordingsMsg: 'No personal recordings found. Use the microphone to record one!',
+    selectRecordingLabel: 'Choose Recorded Meditation',
   },
   ru: {
     welcomeTitle: 'Добро пожаловать в Zen Space',
@@ -214,6 +218,10 @@ export const translations = {
     confirmBtn: 'Подтвердить',
     deviceDefaultLabel: 'Микрофон по умолчанию',
     soundSettingsTitle: 'Настройка звука',
+    ambientSoundsTab: 'Фоновые звуки',
+    myRecordingsTab: 'Мои записи',
+    noRecordingsMsg: 'У вас пока нет личных записей. Используйте микрофон, чтобы записать медитацию!',
+    selectRecordingLabel: 'Выберите записанную медитацию',
   },
 };
 

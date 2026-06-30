@@ -32,9 +32,17 @@ func validateAdmin(c *gin.Context, authManager *room.AuthManager) bool {
 }
 
 // GetTracksHandler handles GET /api/tracks
-func GetTracksHandler() gin.HandlerFunc {
+func GetTracksHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tracks := room.GetTracks()
+		token := c.GetHeader("Authorization")
+		if token == "" {
+			token = c.Query("token")
+		} else {
+			token = strings.TrimPrefix(token, "Bearer ")
+		}
+
+		username, _ := authManager.ValidateToken(token)
+		tracks := room.GetTracksForUser(username)
 		c.JSON(http.StatusOK, tracks)
 	}
 }
@@ -76,7 +84,7 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		}
 
 		audioURL := fmt.Sprintf("/uploads/%s", uniqueFilename)
-		newTrack, err := room.AddTrack(title, artist, audioURL, durationNum)
+		newTrack, err := room.AddTrack(title, artist, audioURL, durationNum, "")
 		if err != nil {
 			os.Remove(uploadPath) // Clean up file on failure
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

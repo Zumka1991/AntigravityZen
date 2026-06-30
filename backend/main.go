@@ -41,7 +41,7 @@ func main() {
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))
 
-	r.GET("/api/tracks", handlers.GetTracksHandler())
+	r.GET("/api/tracks", handlers.GetTracksHandler(authManager))
 	r.POST("/api/tracks", handlers.AddTrackHandler(authManager))
 	r.DELETE("/api/tracks", handlers.DeleteTrackHandler(authManager))
 

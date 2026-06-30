@@ -47,6 +47,18 @@ func InitDB(dbPath string) *sql.DB {
 		}
 	}
 
+	// Dynamic column migration for tracks table
+	var colExists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('tracks') WHERE name='owner_username')").Scan(&colExists)
+	if err == nil && !colExists {
+		_, err = db.Exec("ALTER TABLE tracks ADD COLUMN owner_username TEXT")
+		if err != nil {
+			log.Printf("Error adding owner_username column to tracks table: %v", err)
+		} else {
+			log.Println("Added owner_username column to tracks table successfully")
+		}
+	}
+
 	dbConn = db
 	return db
 }
