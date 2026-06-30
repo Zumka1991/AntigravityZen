@@ -58,7 +58,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [copied, setCopied] = useState(false);
 
   // Audio Volume States
-  const [musicVolume, setMusicVolume] = useState(0.8);
+  const [musicVolume, setMusicVolume] = useState(0.55);
   const [voiceVolume, setVoiceVolume] = useState(1.0);
   const [showVolumeControls, setShowVolumeControls] = useState(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,6 +85,8 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const processedMicrophoneStreamRef = useRef<MediaStream | null>(null);
+  const microphoneProcessingContextRef = useRef<AudioContext | null>(null);
   const [showMicModal, setShowMicModal] = useState(false);
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState('');
@@ -173,15 +175,20 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     setMicLevel(0);
   };
 
+  const getSpeechConstraints = (deviceId: string): MediaStreamConstraints => ({
+    audio: {
+      deviceId: deviceId ? { exact: deviceId } : undefined,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+    },
+  });
+
   const startMicTest = async (deviceId: string) => {
     stopMicTest(); // Stop any active test first
     try {
-      const constraints = {
-        audio: {
-          deviceId: deviceId ? { exact: deviceId } : undefined
-        }
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(getSpeechConstraints(deviceId));
       testStreamRef.current = stream;
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -236,6 +243,17 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     }
     if (microphoneStreamRef.current) {
       microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+      microphoneStreamRef.current = null;
+    }
+    if (processedMicrophoneStreamRef.current) {
+      processedMicrophoneStreamRef.current.getTracks().forEach(track => track.stop());
+      processedMicrophoneStreamRef.current = null;
+    }
+    if (microphoneProcessingContextRef.current) {
+      if (microphoneProcessingContextRef.current.state !== 'closed') {
+        microphoneProcessingContextRef.current.close().catch(() => {});
+      }
+      microphoneProcessingContextRef.current = null;
     }
     setIsMicrophoneActive(false);
     onVoiceStop();
@@ -295,23 +313,54 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     stopMicTest(); // Stop the test context before starting streaming
     try {
       localStorage.setItem('zen_selected_mic_id', deviceId);
-      const constraints = {
-        audio: {
-          deviceId: deviceId ? { exact: deviceId } : undefined
-        }
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(getSpeechConstraints(deviceId));
       microphoneStreamRef.current = stream;
 
-      startStreamingMicAnalysis(stream); // Start active voice level analysis
-      onVoiceStart();
+      let outgoingStream = stream;
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          microphoneProcessingContextRef.current = audioCtx;
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+
+          const source = audioCtx.createMediaStreamSource(stream);
+          const highPass = audioCtx.createBiquadFilter();
+          highPass.type = 'highpass';
+          highPass.frequency.value = 85;
+
+          const gain = audioCtx.createGain();
+          gain.gain.value = 2.5;
+
+          const compressor = audioCtx.createDynamicsCompressor();
+          compressor.threshold.value = -20;
+          compressor.knee.value = 18;
+          compressor.ratio.value = 6;
+          compressor.attack.value = 0.004;
+          compressor.release.value = 0.22;
+
+          const destination = audioCtx.createMediaStreamDestination();
+          source.connect(highPass).connect(gain).connect(compressor).connect(destination);
+          outgoingStream = destination.stream;
+          processedMicrophoneStreamRef.current = outgoingStream;
+        }
+      } catch (processingError) {
+        console.warn('Voice processing is unavailable, using the raw microphone stream:', processingError);
+      }
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = new MediaRecorder(outgoingStream, {
+        mimeType,
+        audioBitsPerSecond: 64000,
+      });
       mediaRecorderRef.current = mediaRecorder;
+      startStreamingMicAnalysis(outgoingStream); // Analyze exactly what listeners receive
+      onVoiceStart();
 
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
@@ -325,6 +374,14 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       setShowMicModal(false);
     } catch (err) {
       console.error('Microphone start failed:', err);
+      microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+      processedMicrophoneStreamRef.current?.getTracks().forEach(track => track.stop());
+      microphoneStreamRef.current = null;
+      processedMicrophoneStreamRef.current = null;
+      if (microphoneProcessingContextRef.current?.state !== 'closed') {
+        microphoneProcessingContextRef.current?.close().catch(() => {});
+      }
+      microphoneProcessingContextRef.current = null;
       alert(t.micAccessError || 'Could not access microphone.');
     }
   };
@@ -339,6 +396,12 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       }
       if (microphoneStreamRef.current) {
         microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (processedMicrophoneStreamRef.current) {
+        processedMicrophoneStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (microphoneProcessingContextRef.current?.state !== 'closed') {
+        microphoneProcessingContextRef.current?.close().catch(() => {});
       }
     };
   }, []);
@@ -478,6 +541,14 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
   const isHost = roomState.hostId === clientId;
   const isPlaying = roomState.status === 'playing';
+  const hasLiveVoice = Boolean(voiceNarrator) || isMicrophoneActive;
+  const effectiveMusicVolume = hasLiveVoice ? musicVolume * 0.18 : musicVolume;
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = effectiveMusicVolume;
+    }
+  }, [effectiveMusicVolume]);
 
   // Configurable states for host before starting
   const ambientTracks = tracks.filter(tr => !tr.ownerUsername || tr.isPublic);
@@ -558,7 +629,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         }
 
         audioRef.current.muted = isMuted;
-        audioRef.current.volume = musicVolume;
+        audioRef.current.volume = effectiveMusicVolume;
         audioRef.current.currentTime = elapsedSeconds;
 
         // Try to play audio
