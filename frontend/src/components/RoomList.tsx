@@ -11,6 +11,14 @@ export interface Track {
   isPublic: boolean;
 }
 
+export interface MeditationBackground {
+  id: string;
+  title: string;
+  imageUrl: string;
+  isDefault: boolean;
+  uploadedBy?: string;
+}
+
 export interface RoomInfo {
   id: string;
   name: string;
@@ -18,20 +26,23 @@ export interface RoomInfo {
   memberCount: number;
   status: string;
   activeTrack?: Track;
+  background?: MeditationBackground;
 }
 
 interface RoomListProps {
   rooms: RoomInfo[];
   tracks: Track[];
+  backgrounds: MeditationBackground[];
   username: string;
   onJoinRoom: (roomId: string) => void;
-  onCreateRoom: (roomName: string, duration: number, trackId: string, voiceTrackId?: string) => void;
+  onCreateRoom: (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string) => void;
   t: typeof translations.en;
 }
 
 export const RoomList: React.FC<RoomListProps> = ({
   rooms,
   tracks,
+  backgrounds,
   username,
   onJoinRoom,
   onCreateRoom,
@@ -44,6 +55,8 @@ export const RoomList: React.FC<RoomListProps> = ({
   const recordedTracks = tracks.filter(t => !!t.ownerUsername && !t.isPublic);
   const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
   const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('none');
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState(backgrounds[0]?.id || '');
+  const [openCreationSection, setOpenCreationSection] = useState<'sound' | 'background' | 'voice' | null>('sound');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -113,13 +126,14 @@ export const RoomList: React.FC<RoomListProps> = ({
     e.preventDefault();
     if (!roomName.trim()) return;
     const voiceId = selectedVoiceTrackId !== 'none' ? selectedVoiceTrackId : undefined;
-    onCreateRoom(roomName.trim(), duration, selectedTrackId, voiceId);
+    onCreateRoom(roomName.trim(), duration, selectedTrackId, selectedBackgroundId, voiceId);
     setShowCreateModal(false);
     setRoomName('');
   };
 
   // Helper to translate track names
-  const getTrackTitle = (track: Track) => {
+  const getTrackTitle = (track: Track | undefined) => {
+    if (!track) return '';
     return (t as any)[track.id] || track.title;
   };
 
@@ -154,6 +168,9 @@ export const RoomList: React.FC<RoomListProps> = ({
         <button className="btn btn-primary" onClick={() => {
           if (ambientTracks.length > 0 && !selectedTrackId) {
             setSelectedTrackId(ambientTracks[0].id);
+          }
+          if (backgrounds.length > 0 && !selectedBackgroundId) {
+            setSelectedBackgroundId(backgrounds[0].id);
           }
           setShowCreateModal(true);
         }}>
@@ -253,9 +270,21 @@ export const RoomList: React.FC<RoomListProps> = ({
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>{t.selectSoundscape}</label>
-                <div className="track-selector">
+              <div className={`creation-accordion ${openCreationSection === 'sound' ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="creation-accordion-trigger"
+                  onClick={() => setOpenCreationSection(openCreationSection === 'sound' ? null : 'sound')}
+                >
+                  <span>
+                    <strong>♫ {t.selectSoundscape}</strong>
+                    <small>{getTrackTitle(ambientTracks.find((track) => track.id === selectedTrackId))}</small>
+                  </span>
+                  <span className="creation-accordion-chevron">⌄</span>
+                </button>
+                {openCreationSection === 'sound' && (
+                  <div className="creation-accordion-content">
+                    <div className="track-selector">
                   {ambientTracks.map((track) => (
                     <div
                       key={track.id}
@@ -303,15 +332,64 @@ export const RoomList: React.FC<RoomListProps> = ({
                       </div>
                     </div>
                   ))}
-                </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={`creation-accordion ${openCreationSection === 'background' ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="creation-accordion-trigger"
+                  onClick={() => setOpenCreationSection(openCreationSection === 'background' ? null : 'background')}
+                >
+                  <span>
+                    <strong>▧ {t.selectBackground}</strong>
+                    <small>
+                      {(t as any)[selectedBackgroundId]
+                        || backgrounds.find((background) => background.id === selectedBackgroundId)?.title}
+                    </small>
+                  </span>
+                  <span className="creation-accordion-chevron">⌄</span>
+                </button>
+                {openCreationSection === 'background' && (
+                  <div className="creation-accordion-content">
+                    <div className="background-selector">
+                  {backgrounds.map((background) => (
+                    <button
+                      key={background.id}
+                      type="button"
+                      className={`background-option ${selectedBackgroundId === background.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedBackgroundId(background.id)}
+                      style={{ backgroundImage: `url("${background.imageUrl}")` }}
+                    >
+                      <span>{(t as any)[background.id] || background.title}</span>
+                    </button>
+                  ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Voice Accompaniment Selector */}
-              <div className="form-group">
-                <label>
-                  🎙️ {t.durationMinutes === 'мин' ? 'Голосовое сопровождение' : 'Voice Accompaniment'}
-                </label>
-
+              <div className={`creation-accordion ${openCreationSection === 'voice' ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="creation-accordion-trigger"
+                  onClick={() => setOpenCreationSection(openCreationSection === 'voice' ? null : 'voice')}
+                >
+                  <span>
+                    <strong>🎙️ {t.durationMinutes === 'мин' ? 'Голосовое сопровождение' : 'Voice Accompaniment'}</strong>
+                    <small>
+                      {selectedVoiceTrackId === 'none'
+                        ? (t.durationMinutes === 'мин' ? 'Без голоса' : 'No voice')
+                        : tracks.find((track) => track.id === selectedVoiceTrackId)?.title}
+                    </small>
+                  </span>
+                  <span className="creation-accordion-chevron">⌄</span>
+                </button>
+                {openCreationSection === 'voice' && (
+                  <div className="creation-accordion-content">
                 {recordedTracks.length === 0 ? (
                   <div style={{
                     padding: '0.85rem 1rem',
@@ -391,6 +469,8 @@ export const RoomList: React.FC<RoomListProps> = ({
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
                   </div>
                 )}
               </div>

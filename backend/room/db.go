@@ -50,6 +50,13 @@ func InitDB(dbPath string) *sql.DB {
 		`CREATE INDEX IF NOT EXISTS idx_global_chat_messages_id
 			ON global_chat_messages(id
 		);`,
+		`CREATE TABLE IF NOT EXISTS meditation_backgrounds (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			image_url TEXT NOT NULL,
+			is_default INTEGER NOT NULL DEFAULT 0,
+			uploaded_by TEXT
+		);`,
 	}
 
 	for _, query := range queries {

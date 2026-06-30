@@ -19,6 +19,7 @@ func WSHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 		durationStr := c.Query("duration")
 		trackID := c.Query("trackId")
 		voiceTrackID := c.Query("voiceTrackId")
+		backgroundID := c.Query("backgroundId")
 
 		if roomID == "" || token == "" || clientID == "" {
 			c.String(http.StatusBadRequest, "Missing roomId, token, or clientId parameters")
@@ -38,6 +39,6 @@ func WSHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 			}
 		}
 
-		room.ServeWs(hub, c.Writer, c.Request, roomID, username, clientID, roomName, duration, trackID, voiceTrackID)
+		room.ServeWs(hub, c.Writer, c.Request, roomID, username, clientID, roomName, duration, trackID, voiceTrackID, backgroundID)
 	}
 }

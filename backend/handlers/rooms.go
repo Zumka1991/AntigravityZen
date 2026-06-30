@@ -15,12 +15,13 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 		defer hub.Mutex.RUnlock()
 
 		type RoomInfo struct {
-			ID          string      `json:"id"`
-			Name        string      `json:"name"`
-			HostID      string      `json:"hostId"`
-			MemberCount int         `json:"memberCount"`
-			Status      string      `json:"status"`
-			ActiveTrack *room.Track `json:"activeTrack,omitempty"`
+			ID          string                     `json:"id"`
+			Name        string                     `json:"name"`
+			HostID      string                     `json:"hostId"`
+			MemberCount int                        `json:"memberCount"`
+			Status      string                     `json:"status"`
+			ActiveTrack *room.Track                `json:"activeTrack,omitempty"`
+			Background  *room.MeditationBackground `json:"background,omitempty"`
 		}
 
 		rooms := make([]RoomInfo, 0, len(hub.Rooms))
@@ -33,6 +34,7 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 				MemberCount: len(rm.Clients),
 				Status:      rm.Status,
 				ActiveTrack: rm.ActiveTrack,
+				Background:  rm.Background,
 			})
 			rm.Mutex.RUnlock()
 		}

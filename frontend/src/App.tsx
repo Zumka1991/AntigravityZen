@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { RoomList } from './components/RoomList';
 import type { RoomInfo, Track } from './components/RoomList';
+import type { MeditationBackground } from './components/RoomList';
 import { MeditationRoom } from './components/MeditationRoom';
 import { GlobalChat } from './components/GlobalChat';
+import { BackgroundManager } from './components/BackgroundManager';
 import { translations } from './translations';
 import type { Language } from './translations';
 
@@ -61,9 +63,10 @@ function App() {
     return id;
   });
 
-  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string } | null>(null);
+  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string; backgroundId?: string } | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [backgrounds, setBackgrounds] = useState<MeditationBackground[]>([]);
   const sharedTracks = tracks.filter((track) => !track.ownerUsername || track.isPublic);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
@@ -152,6 +155,20 @@ function App() {
     }
   };
 
+  const fetchBackgrounds = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/backgrounds`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setBackgrounds(await res.json());
+      }
+    } catch (err) {
+      console.error('Error fetching backgrounds:', err);
+    }
+  };
+
   // Check for roomId query param on startup to auto-join
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -166,6 +183,7 @@ function App() {
   useEffect(() => {
     if (!token) return;
     fetchTracks();
+    fetchBackgrounds();
     fetchRooms();
 
     // Poll room list every 5 seconds when in lobby
@@ -195,7 +213,8 @@ function App() {
       const durationParam = activeRoom.duration ? `&duration=${activeRoom.duration}` : '';
       const trackParam = activeRoom.trackId ? `&trackId=${activeRoom.trackId}` : '';
       const voiceTrackParam = activeRoom.voiceTrackId ? `&voiceTrackId=${activeRoom.voiceTrackId}` : '';
-      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}${voiceTrackParam}`;
+      const backgroundParam = activeRoom.backgroundId ? `&backgroundId=${activeRoom.backgroundId}` : '';
+      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}${voiceTrackParam}${backgroundParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -315,9 +334,9 @@ function App() {
     setActiveRoom({ id: roomId, name: null });
   };
 
-  const handleCreateRoom = (roomName: string, duration: number, trackId: string, voiceTrackId?: string) => {
+  const handleCreateRoom = (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string) => {
     const roomId = generateId().slice(0, 8);
-    setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId });
+    setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId, backgroundId });
   };
 
   const handleLeaveRoom = () => {
@@ -786,6 +805,7 @@ function App() {
             <RoomList
               rooms={rooms}
               tracks={tracks}
+              backgrounds={backgrounds}
               username={username}
               onJoinRoom={handleJoinRoom}
               onCreateRoom={handleCreateRoom}
@@ -1014,6 +1034,16 @@ function App() {
                 )}
               </div>
             </div>
+
+            {username === 'admin' && token && (
+              <BackgroundManager
+                apiBase={API_BASE}
+                token={token}
+                backgrounds={backgrounds}
+                onChanged={fetchBackgrounds}
+                t={t}
+              />
+            )}
           </div>
         </div>
       )}

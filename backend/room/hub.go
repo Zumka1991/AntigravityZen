@@ -41,16 +41,17 @@ type Message struct {
 
 // RoomState payload sent to clients
 type RoomState struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	HostID      string `json:"hostId"`
-	Clients     []User `json:"clients"`
-	Status      string `json:"status"` // "lobby", "playing", "finished"
-	ActiveTrack *Track `json:"activeTrack,omitempty"`
-	VoiceTrack  *Track `json:"voiceTrack,omitempty"`
-	Duration    int    `json:"duration,omitempty"`  // selected duration in seconds
-	StartedAt   int64  `json:"startedAt,omitempty"` // Unix timestamp in ms
-	ServerTime  int64  `json:"serverTime"`          // current server Unix timestamp in ms
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	HostID      string                `json:"hostId"`
+	Clients     []User                `json:"clients"`
+	Status      string                `json:"status"` // "lobby", "playing", "finished"
+	ActiveTrack *Track                `json:"activeTrack,omitempty"`
+	VoiceTrack  *Track                `json:"voiceTrack,omitempty"`
+	Background  *MeditationBackground `json:"background,omitempty"`
+	Duration    int                   `json:"duration,omitempty"`  // selected duration in seconds
+	StartedAt   int64                 `json:"startedAt,omitempty"` // Unix timestamp in ms
+	ServerTime  int64                 `json:"serverTime"`          // current server Unix timestamp in ms
 }
 
 type User struct {
@@ -71,6 +72,7 @@ type Client struct {
 	InitialDuration     int
 	InitialTrackID      string
 	InitialVoiceTrackID string
+	InitialBackgroundID string
 }
 
 // Room represents a single meditation session room
@@ -82,8 +84,9 @@ type Room struct {
 	Status         string // "lobby", "playing", "finished"
 	ActiveTrack    *Track
 	VoiceTrack     *Track // pre-recorded voice accompaniment
-	Duration       int    // in seconds
-	StartedAt      int64  // timestamp in ms
+	Background     *MeditationBackground
+	Duration       int   // in seconds
+	StartedAt      int64 // timestamp in ms
 	VoiceFile      *os.File
 	VoiceFilePath  string
 	VoiceStartedAt int64 // Unix timestamp in ms
@@ -122,6 +125,10 @@ func (h *Hub) Run() {
 					track = &GetTracks()[0]
 				}
 				voiceTrack := FindTrack(client.InitialVoiceTrackID)
+				background := FindBackground(client.InitialBackgroundID)
+				if background == nil && len(GetBackgrounds()) > 0 {
+					background = &GetBackgrounds()[0]
+				}
 				duration := client.InitialDuration
 				if duration <= 0 {
 					duration = 60 // 1 minute default
@@ -135,6 +142,7 @@ func (h *Hub) Run() {
 					Status:      "lobby",
 					ActiveTrack: track,
 					VoiceTrack:  voiceTrack,
+					Background:  background,
 					Duration:    duration,
 				}
 				h.Rooms[client.RoomID] = room
@@ -231,6 +239,7 @@ func (h *Hub) BroadcastRoomState(roomID string) {
 		Status:      room.Status,
 		ActiveTrack: room.ActiveTrack,
 		VoiceTrack:  room.VoiceTrack,
+		Background:  room.Background,
 		Duration:    room.Duration,
 		StartedAt:   room.StartedAt,
 		ServerTime:  time.Now().UnixNano() / int64(time.Millisecond),
@@ -341,7 +350,7 @@ func (h *Hub) SendChatHistory(client *Client) {
 }
 
 // ServeWs upgrades HTTP connection to websocket
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, username string, clientID string, roomName string, initialDuration int, initialTrackID string, initialVoiceTrackID string) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, username string, clientID string, roomName string, initialDuration int, initialTrackID string, initialVoiceTrackID string, initialBackgroundID string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -359,6 +368,7 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, us
 		InitialDuration:     initialDuration,
 		InitialTrackID:      initialTrackID,
 		InitialVoiceTrackID: initialVoiceTrackID,
+		InitialBackgroundID: initialBackgroundID,
 	}
 
 	client.Hub.Register <- client

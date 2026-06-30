@@ -689,6 +689,14 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     <div className="room-grid">
       {/* Meditation Center Area */}
       <div className="glass-panel meditation-center">
+        {isPlaying && roomState.background && (
+          <div
+            className="meditation-background"
+            style={{ backgroundImage: `url("${roomState.background.imageUrl}")` }}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Top bar controls */}
         <div className="room-top-bar">
           <button 
@@ -1016,6 +1024,14 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                           {getTrackTitle(tracks.find(tr => tr.id === selectedTrackId))}
                         </span>
                       </div>
+                      {roomState.background && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
+                          <span>▧</span>
+                          <span style={{ color: 'var(--color-text-primary)' }}>
+                            {(t as any)[roomState.background.id] || roomState.background.title}
+                          </span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
                         <span>🎙️</span>
                         <span style={{ color: 'var(--color-text-primary)' }}>

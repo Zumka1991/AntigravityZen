@@ -18,6 +18,7 @@ func main() {
 	room.MigrateJSONToDB(db)
 	room.InitTracks()
 	room.InitChat()
+	room.InitBackgrounds()
 	os.MkdirAll("./uploads/recordings", 0755)
 
 	authManager := room.NewAuthManager(db)
@@ -46,6 +47,9 @@ func main() {
 	r.DELETE("/api/tracks", handlers.DeleteTrackHandler(authManager))
 	r.GET("/api/global-chat", handlers.GetGlobalChatHandler(authManager))
 	r.POST("/api/global-chat", handlers.AddGlobalChatMessageHandler(authManager))
+	r.GET("/api/backgrounds", handlers.GetBackgroundsHandler(authManager))
+	r.POST("/api/backgrounds", handlers.AddBackgroundHandler(authManager))
+	r.DELETE("/api/backgrounds", handlers.DeleteBackgroundHandler(authManager))
 
 	// WebSocket Route
 	r.GET("/ws", handlers.WSHandler(hub, authManager))
