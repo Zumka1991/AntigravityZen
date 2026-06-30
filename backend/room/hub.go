@@ -440,7 +440,7 @@ func (h *Hub) stopVoiceRecordingLocked(room *Room) {
 	hostID := room.HostID
 
 	// Register track in DB asynchronously to keep websocket thread responsive
-	if durationSec > 2 {
+	if durationSec > 0 {
 		hostUsername := "Host"
 		for c := range room.Clients {
 			if c.ID == hostID {
