@@ -87,6 +87,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const processedMicrophoneStreamRef = useRef<MediaStream | null>(null);
   const microphoneProcessingContextRef = useRef<AudioContext | null>(null);
+  const noiseGateAnimationFrameRef = useRef<number | null>(null);
   const [showMicModal, setShowMicModal] = useState(false);
   const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState('');
@@ -238,6 +239,10 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const stopMicrophone = () => {
     stopMicTest();
     stopStreamingMicAnalysis();
+    if (noiseGateAnimationFrameRef.current) {
+      cancelAnimationFrame(noiseGateAnimationFrameRef.current);
+      noiseGateAnimationFrameRef.current = null;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -329,10 +334,17 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
           const source = audioCtx.createMediaStreamSource(stream);
           const highPass = audioCtx.createBiquadFilter();
           highPass.type = 'highpass';
-          highPass.frequency.value = 85;
+          highPass.frequency.value = 110;
+
+          const lowPass = audioCtx.createBiquadFilter();
+          lowPass.type = 'lowpass';
+          lowPass.frequency.value = 7800;
+
+          const noiseGate = audioCtx.createGain();
+          noiseGate.gain.value = 0.08;
 
           const gain = audioCtx.createGain();
-          gain.gain.value = 2.5;
+          gain.gain.value = 1.65;
 
           const compressor = audioCtx.createDynamicsCompressor();
           compressor.threshold.value = -20;
@@ -341,8 +353,44 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
           compressor.attack.value = 0.004;
           compressor.release.value = 0.22;
 
+          const gateAnalyser = audioCtx.createAnalyser();
+          gateAnalyser.fftSize = 512;
+          const gateSamples = new Float32Array(gateAnalyser.fftSize);
+          let gateIsOpen = false;
+          let gateHoldUntil = 0;
+
           const destination = audioCtx.createMediaStreamDestination();
-          source.connect(highPass).connect(gain).connect(compressor).connect(destination);
+          source.connect(highPass).connect(lowPass);
+          lowPass.connect(gateAnalyser);
+          lowPass.connect(noiseGate).connect(gain).connect(compressor).connect(destination);
+
+          const updateNoiseGate = () => {
+            if (audioCtx.state === 'closed') return;
+            gateAnalyser.getFloatTimeDomainData(gateSamples);
+            let sumSquares = 0;
+            for (let index = 0; index < gateSamples.length; index += 1) {
+              sumSquares += gateSamples[index] * gateSamples[index];
+            }
+            const rms = Math.sqrt(sumSquares / gateSamples.length);
+            const now = performance.now();
+
+            if (rms >= 0.012) {
+              gateIsOpen = true;
+              gateHoldUntil = now + 240;
+            } else if (gateIsOpen && now >= gateHoldUntil && rms < 0.006) {
+              gateIsOpen = false;
+            }
+
+            const targetGain = gateIsOpen ? 1 : 0.08;
+            noiseGate.gain.setTargetAtTime(
+              targetGain,
+              audioCtx.currentTime,
+              gateIsOpen ? 0.012 : 0.09,
+            );
+            noiseGateAnimationFrameRef.current = requestAnimationFrame(updateNoiseGate);
+          };
+          noiseGateAnimationFrameRef.current = requestAnimationFrame(updateNoiseGate);
+
           outgoingStream = destination.stream;
           processedMicrophoneStreamRef.current = outgoingStream;
         }
@@ -376,6 +424,10 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       console.error('Microphone start failed:', err);
       microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
       processedMicrophoneStreamRef.current?.getTracks().forEach(track => track.stop());
+      if (noiseGateAnimationFrameRef.current) {
+        cancelAnimationFrame(noiseGateAnimationFrameRef.current);
+        noiseGateAnimationFrameRef.current = null;
+      }
       microphoneStreamRef.current = null;
       processedMicrophoneStreamRef.current = null;
       if (microphoneProcessingContextRef.current?.state !== 'closed') {
@@ -399,6 +451,10 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       }
       if (processedMicrophoneStreamRef.current) {
         processedMicrophoneStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (noiseGateAnimationFrameRef.current) {
+        cancelAnimationFrame(noiseGateAnimationFrameRef.current);
+        noiseGateAnimationFrameRef.current = null;
       }
       if (microphoneProcessingContextRef.current?.state !== 'closed') {
         microphoneProcessingContextRef.current?.close().catch(() => {});
