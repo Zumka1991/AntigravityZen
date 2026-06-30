@@ -323,6 +323,10 @@ function App() {
     }
     setActiveRoom(null);
     fetchRooms();
+    // Refresh tracks so any newly recorded sessions appear immediately
+    // Two fetches: first at 500ms (optimistic), second at 2500ms (catches async DB save)
+    setTimeout(() => fetchTracks(), 500);
+    setTimeout(() => fetchTracks(), 2500);
   };
 
   // Auth operations
