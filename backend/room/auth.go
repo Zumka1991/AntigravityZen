@@ -3,11 +3,10 @@ package room
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"log"
-	"os"
 	"strings"
 	"sync"
 )
@@ -19,50 +18,19 @@ type StoredUser struct {
 	Salt         string `json:"salt"`
 }
 
-// AuthManager управляет сессиями и пользователями
+// AuthManager управляет сессиями и пользователями с помощью SQLite
 type AuthManager struct {
-	usersFile string
-	users     map[string]StoredUser
-	sessions  map[string]string // token -> username
-	mu        sync.RWMutex
+	db       *sql.DB
+	sessions map[string]string // token -> username
+	mu       sync.RWMutex
 }
 
-// NewAuthManager создает новый менеджер авторизации
-func NewAuthManager(usersFile string) *AuthManager {
-	am := &AuthManager{
-		usersFile: usersFile,
-		users:     make(map[string]StoredUser),
-		sessions:  make(map[string]string),
+// NewAuthManager создает новый менеджер авторизации с использованием БД
+func NewAuthManager(db *sql.DB) *AuthManager {
+	return &AuthManager{
+		db:       db,
+		sessions: make(map[string]string),
 	}
-	if err := am.loadUsers(); err != nil {
-		log.Printf("Warning: failed to load users: %v", err)
-	}
-	return am
-}
-
-// LoadUsers считывает пользователей из JSON-файла
-func (am *AuthManager) loadUsers() error {
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
-	data, err := os.ReadFile(am.usersFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // Файл еще не создан — это нормально
-		}
-		return err
-	}
-
-	return json.Unmarshal(data, &am.users)
-}
-
-// SaveUsers сохраняет пользователей в JSON-файл
-func (am *AuthManager) saveUsers() error {
-	data, err := json.MarshalIndent(am.users, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(am.usersFile, data, 0644)
 }
 
 // Register регистрирует нового пользователя и возвращает сессионный токен
@@ -77,28 +45,29 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 
 	key := strings.ToLower(username)
 
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
-	if _, exists := am.users[key]; exists {
+	// Проверяем, существует ли пользователь (без учета регистра)
+	var exists bool
+	err := am.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = ?)", key).Scan(&exists)
+	if err != nil {
+		return "", err
+	}
+	if exists {
 		return "", errors.New("username already taken")
 	}
 
 	salt := generateSalt()
 	hash := hashPassword(password, salt)
 
-	am.users[key] = StoredUser{
-		Username:     username,
-		PasswordHash: hash,
-		Salt:         salt,
-	}
-
-	if err := am.saveUsers(); err != nil {
+	// Записываем в БД
+	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)", username, hash, salt)
+	if err != nil {
 		return "", err
 	}
 
 	token := generateToken()
+	am.mu.Lock()
 	am.sessions[token] = username
+	am.mu.Unlock()
 
 	return token, nil
 }
@@ -108,21 +77,28 @@ func (am *AuthManager) Login(username, password string) (string, error) {
 	username = strings.TrimSpace(username)
 	key := strings.ToLower(username)
 
-	am.mu.Lock()
-	defer am.mu.Unlock()
+	var dbUsername string
+	var passwordHash string
+	var salt string
 
-	user, exists := am.users[key]
-	if !exists {
-		return "", errors.New("invalid username or password")
+	err := am.db.QueryRow("SELECT username, password_hash, salt FROM users WHERE LOWER(username) = ?", key).
+		Scan(&dbUsername, &passwordHash, &salt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.New("invalid username or password")
+		}
+		return "", err
 	}
 
-	hash := hashPassword(password, user.Salt)
-	if hash != user.PasswordHash {
+	hash := hashPassword(password, salt)
+	if hash != passwordHash {
 		return "", errors.New("invalid username or password")
 	}
 
 	token := generateToken()
-	am.sessions[token] = user.Username
+	am.mu.Lock()
+	am.sessions[token] = dbUsername
+	am.mu.Unlock()
 
 	return token, nil
 }
@@ -151,25 +127,21 @@ func (am *AuthManager) Logout(token string) {
 
 // EnsureAdminCreated проверяет наличие пользователя admin и создает его с паролем по умолчанию, если его нет
 func (am *AuthManager) EnsureAdminCreated(defaultPassword string) {
-	key := "admin"
-
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
-	if _, exists := am.users[key]; exists {
+	var exists bool
+	err := am.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = 'admin')").Scan(&exists)
+	if err != nil {
+		log.Printf("Error checking if admin user exists: %v", err)
+		return
+	}
+	if exists {
 		return
 	}
 
 	salt := generateSalt()
 	hash := hashPassword(defaultPassword, salt)
 
-	am.users[key] = StoredUser{
-		Username:     "admin",
-		PasswordHash: hash,
-		Salt:         salt,
-	}
-
-	if err := am.saveUsers(); err != nil {
+	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)", "admin", hash, salt)
+	if err != nil {
 		log.Printf("Error creating default admin user: %v", err)
 	} else {
 		log.Println("Default admin user created successfully")

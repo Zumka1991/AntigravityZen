@@ -70,6 +70,16 @@ function App() {
   const [roomState, setRoomState] = useState<any>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const [voiceNarrator, setVoiceNarrator] = useState<string | null>(null);
+  const [voiceFileUrl, setVoiceFileUrl] = useState<string | null>(null);
+  const voiceListenersRef = useRef<((chunk: ArrayBuffer) => void)[]>([]);
+
+  const registerVoiceListener = (listener: (chunk: ArrayBuffer) => void) => {
+    voiceListenersRef.current.push(listener);
+    return () => {
+      voiceListenersRef.current = voiceListenersRef.current.filter(l => l !== listener);
+    };
+  };
 
   // Verify token on mount
   useEffect(() => {
@@ -173,6 +183,7 @@ function App() {
       }
       setRoomState(null);
       setChatMessages([]);
+      setVoiceNarrator(null);
       return;
     }
 
@@ -206,6 +217,40 @@ function App() {
                   text: data.payload.text,
                   timestamp: data.timestamp,
                 }]);
+                break;
+              case 'chat_history':
+                if (Array.isArray(data.payload)) {
+                  setChatMessages(data.payload.map((msg: any) => ({
+                    type: 'chat',
+                    username: msg.username,
+                    text: msg.text,
+                    timestamp: msg.timestamp,
+                  })));
+                }
+                break;
+              case 'voice_start':
+                const fileUrl = data.payload && data.payload.file_url ? data.payload.file_url : null;
+                setVoiceFileUrl(fileUrl);
+                setVoiceNarrator(data.username);
+                break;
+              case 'voice_stop':
+                setVoiceNarrator(null);
+                setVoiceFileUrl(null);
+                break;
+              case 'voice_data':
+                if (data.payload && data.payload.data) {
+                  try {
+                    const binaryString = window.atob(data.payload.data);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) {
+                      bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    voiceListenersRef.current.forEach(listener => listener(bytes.buffer));
+                  } catch (e) {
+                    console.error('Error decoding voice chunk:', e);
+                  }
+                }
                 break;
               default:
                 console.log('Unknown websocket message type:', data.type);
@@ -399,6 +444,24 @@ function App() {
         payload: { text },
       };
       wsRef.current.send(JSON.stringify(msg));
+    }
+  };
+
+  const handleVoiceStart = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'voice_start', payload: {} }));
+    }
+  };
+
+  const handleVoiceStop = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'voice_stop', payload: {} }));
+    }
+  };
+
+  const handleVoiceData = (arrayBuffer: ArrayBuffer) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(arrayBuffer);
     }
   };
 
@@ -669,6 +732,12 @@ function App() {
               onStopMeditation={handleStopMeditation}
               onLeaveRoom={handleLeaveRoom}
               t={t}
+              voiceNarrator={voiceNarrator}
+              voiceFileUrl={voiceFileUrl}
+              registerVoiceListener={registerVoiceListener}
+              onVoiceStart={handleVoiceStart}
+              onVoiceStop={handleVoiceStop}
+              onVoiceData={handleVoiceData}
             />
           ) : (
             <div className="glass-panel" style={{ padding: '3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', textAlign: 'center', minHeight: '300px' }}>

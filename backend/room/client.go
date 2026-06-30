@@ -2,13 +2,14 @@ package room
 
 import (
 	"bytes"
+	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,7 +26,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	maxMessageSize = 1024 * 1024 // 1MB to support voice chunks
 )
 
 var (
@@ -48,7 +49,7 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		messageType, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -56,8 +57,12 @@ func (c *Client) readPump() {
 			break
 		}
 
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.handleIncomingMessage(message)
+		if messageType == websocket.BinaryMessage {
+			c.handleVoiceData(message)
+		} else {
+			message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+			c.handleIncomingMessage(message)
+		}
 	}
 }
 
@@ -99,6 +104,60 @@ func (c *Client) writePump() {
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
+			}
+		}
+	}
+}
+
+// handleVoiceData processes incoming voice data from the host
+func (c *Client) handleVoiceData(data []byte) {
+	c.Hub.Mutex.RLock()
+	room, exists := c.Hub.Rooms[c.RoomID]
+	c.Hub.Mutex.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	room.Mutex.Lock()
+	defer room.Mutex.Unlock()
+
+	// Only the host can stream voice
+	if room.HostID != c.ID {
+		return
+	}
+
+	// Write to recording file if open
+	if room.VoiceFile != nil {
+		_, err := room.VoiceFile.Write(data)
+		if err != nil {
+			log.Printf("Error writing voice chunk to file: %v", err)
+		}
+	}
+
+	// Encode to base64 for broadcasting over text WebSocket
+	base64Data := base64.StdEncoding.EncodeToString(data)
+	type VoiceDataPayload struct {
+		Data string `json:"data"`
+	}
+	payloadBytes, _ := json.Marshal(VoiceDataPayload{Data: base64Data})
+
+	msg := Message{
+		Type:    "voice_data",
+		Payload: payloadBytes,
+	}
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("Error marshalling voice data message:", err)
+		return
+	}
+
+	// Broadcast voice chunk to other clients in room
+	for client := range room.Clients {
+		if client.ID != c.ID {
+			select {
+			case client.Send <- msgBytes:
+			default:
 			}
 		}
 	}
@@ -200,31 +259,65 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 
 		log.Printf("Meditation stopped in room %s", room.ID)
 		c.Hub.BroadcastRoomState(c.RoomID)
+
+	case "voice_start":
+		room.Mutex.Lock()
+		if room.HostID != c.ID {
+			room.Mutex.Unlock()
+			log.Println("Non-host tried to start voice streaming")
+			return
+		}
+
+		// Ensure directory exists
+		os.MkdirAll("./uploads/recordings", 0755)
+
+		// Create unique filename
+		timestamp := time.Now().Unix()
+		filename := fmt.Sprintf("rec_%s_%d.webm", room.ID, timestamp)
+		filePath := fmt.Sprintf("./uploads/recordings/%s", filename)
+
+		file, err := os.Create(filePath)
+		if err != nil {
+			log.Printf("Error creating voice recording file: %v", err)
+		}
+
+		room.VoiceFile = file
+		room.VoiceFilePath = fmt.Sprintf("/uploads/recordings/%s", filename)
+		room.VoiceStartedAt = time.Now().UnixNano() / int64(time.Millisecond)
+		room.Mutex.Unlock()
+
+		log.Printf("Voice streaming started in room %s. Recording to %s", room.ID, filePath)
+
+		// Broadcast voice_start to all clients in the room
+		c.Hub.BroadcastVoiceEvent(c.RoomID, "voice_start", c.Username)
+
+	case "voice_stop":
+		room.Mutex.Lock()
+		if room.HostID != c.ID {
+			room.Mutex.Unlock()
+			return
+		}
+		c.Hub.stopVoiceRecordingLocked(room)
+		room.Mutex.Unlock()
 	}
 }
 
-var (
-	tracksMutex sync.RWMutex
-	tracksList  []Track
-	tracksFile  = "tracks.json"
-)
-
-// InitTracks инициализирует список треков из файла tracks.json
+// InitTracks инициализирует список дефолтных треков в БД, если таблица пуста
 func InitTracks() {
-	tracksMutex.Lock()
-	defer tracksMutex.Unlock()
-
-	// Попытка загрузить из файла
-	data, err := os.ReadFile(tracksFile)
-	if err == nil {
-		if err := json.Unmarshal(data, &tracksList); err == nil && len(tracksList) > 0 {
-			log.Printf("Loaded %d tracks from %s", len(tracksList), tracksFile)
-			return
-		}
+	var count int
+	err := dbConn.QueryRow("SELECT COUNT(*) FROM tracks").Scan(&count)
+	if err != nil {
+		log.Printf("Error counting tracks in DB: %v", err)
+		return
 	}
 
-	// Дефолтные треки, если файла нет или он пуст
-	tracksList = []Track{
+	if count > 0 {
+		log.Printf("Loaded tracks from SQLite database")
+		return
+	}
+
+	// Дефолтные треки, если база пуста
+	defaultTracks := []Track{
 		{
 			ID:       "ambient-rain",
 			Title:    "Gentle Rain & Thunder",
@@ -248,47 +341,57 @@ func InitTracks() {
 		},
 	}
 
-	// Сохранение дефолтных треков
-	saveTracksLocked()
-	log.Printf("Initialized default tracks in %s", tracksFile)
-}
-
-func saveTracksLocked() {
-	data, err := json.MarshalIndent(tracksList, "", "  ")
+	tx, err := dbConn.Begin()
 	if err != nil {
-		log.Printf("Error encoding tracks: %v", err)
+		log.Printf("Error starting transaction: %v", err)
 		return
 	}
-	if err := os.WriteFile(tracksFile, data, 0644); err != nil {
-		log.Printf("Error writing tracks to file: %v", err)
+
+	for _, t := range defaultTracks {
+		_, err := tx.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration) VALUES (?, ?, ?, ?, ?)",
+			t.ID, t.Title, t.Artist, t.AudioURL, t.Duration)
+		if err != nil {
+			log.Printf("Error inserting default track %s: %v", t.Title, err)
+		}
 	}
+
+	_ = tx.Commit()
+	log.Println("Initialized default tracks in SQLite database")
 }
 
 func FindTrack(id string) *Track {
-	tracksMutex.RLock()
-	defer tracksMutex.RUnlock()
-
-	for _, t := range tracksList {
-		if t.ID == id {
-			// Возвращаем копию, чтобы избежать race conditions при изменении полей
-			trackCopy := t
-			return &trackCopy
+	var t Track
+	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration FROM tracks WHERE id = ?", id).
+		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
 		}
+		log.Printf("Error finding track %s: %v", id, err)
+		return nil
 	}
-	return nil
+	return &t
 }
 
 func GetTracks() []Track {
-	tracksMutex.RLock()
-	defer tracksMutex.RUnlock()
+	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration FROM tracks")
+	if err != nil {
+		log.Printf("Error getting tracks: %v", err)
+		return []Track{}
+	}
+	defer rows.Close()
 
-	// Возвращаем копию слайса
-	res := make([]Track, len(tracksList))
-	copy(res, tracksList)
-	return res
+	var tracks []Track
+	for rows.Next() {
+		var t Track
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration); err == nil {
+			tracks = append(tracks, t)
+		}
+	}
+	return tracks
 }
 
-// AddTrack добавляет новый трек
+// AddTrack добавляет новый трек в БД
 func AddTrack(title, artist, audioURL string, duration int) (Track, error) {
 	title = strings.TrimSpace(title)
 	artist = strings.TrimSpace(artist)
@@ -312,21 +415,16 @@ func AddTrack(title, artist, audioURL string, duration int) (Track, error) {
 		id = "track-" + time.Now().Format("20060102150405")
 	}
 
-	tracksMutex.Lock()
-	defer tracksMutex.Unlock()
-
-	// Убедимся, что ID уникальный
+	// Убедимся, что ID уникальный в БД
 	baseID := id
 	counter := 1
 	for {
-		found := false
-		for _, t := range tracksList {
-			if t.ID == id {
-				found = true
-				break
-			}
+		var exists bool
+		err := dbConn.QueryRow("SELECT EXISTS(SELECT 1 FROM tracks WHERE id = ?)", id).Scan(&exists)
+		if err != nil {
+			return Track{}, err
 		}
-		if !found {
+		if !exists {
 			break
 		}
 		id = fmt.Sprintf("%s-%d", baseID, counter)
@@ -341,32 +439,27 @@ func AddTrack(title, artist, audioURL string, duration int) (Track, error) {
 		Duration: duration,
 	}
 
-	tracksList = append(tracksList, newTrack)
-	saveTracksLocked()
+	_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration) VALUES (?, ?, ?, ?, ?)",
+		newTrack.ID, newTrack.Title, newTrack.Artist, newTrack.AudioURL, newTrack.Duration)
+	if err != nil {
+		return Track{}, err
+	}
 
 	return newTrack, nil
 }
 
-// DeleteTrack удаляет трек по ID
+// DeleteTrack удаляет трек по ID из БД
 func DeleteTrack(id string) error {
-	tracksMutex.Lock()
-	defer tracksMutex.Unlock()
-
-	index := -1
-	for i, t := range tracksList {
-		if t.ID == id {
-			index = i
-			break
-		}
+	res, err := dbConn.Exec("DELETE FROM tracks WHERE id = ?", id)
+	if err != nil {
+		return err
 	}
-
-	if index == -1 {
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
 		return errors.New("track not found")
 	}
-
-	// Удаление элемента из слайса
-	tracksList = append(tracksList[:index], tracksList[index+1:]...)
-	saveTracksLocked()
-
 	return nil
 }

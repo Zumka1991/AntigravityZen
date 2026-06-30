@@ -2,8 +2,10 @@ package room
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -69,15 +71,18 @@ type Client struct {
 
 // Room represents a single meditation session room
 type Room struct {
-	ID          string
-	Name        string
-	HostID      string
-	Clients     map[*Client]bool
-	Status      string // "lobby", "playing", "finished"
-	ActiveTrack *Track
-	Duration    int // in seconds
-	StartedAt   int64 // timestamp in ms
-	Mutex       sync.RWMutex
+	ID             string
+	Name           string
+	HostID         string
+	Clients        map[*Client]bool
+	Status         string // "lobby", "playing", "finished"
+	ActiveTrack    *Track
+	Duration       int // in seconds
+	StartedAt      int64 // timestamp in ms
+	VoiceFile      *os.File
+	VoiceFilePath  string
+	VoiceStartedAt int64 // Unix timestamp in ms
+	Mutex          sync.RWMutex
 }
 
 // Hub maintains the state of active rooms and clients
@@ -126,7 +131,11 @@ func (h *Hub) Run() {
 					Duration:    duration,
 				}
 				h.Rooms[client.RoomID] = room
-				log.Printf("Created room %s with host %s, name %s, duration %ds, track %s", client.RoomID, client.Username, name, duration, track.Title)
+				trackTitle := "none"
+				if track != nil {
+					trackTitle = track.Title
+				}
+				log.Printf("Created room %s with host %s, name %s, duration %ds, track %s", client.RoomID, client.Username, name, duration, trackTitle)
 			}
 
 			room.Mutex.Lock()
@@ -140,6 +149,7 @@ func (h *Hub) Run() {
 
 			// Broadcast updated room state
 			h.BroadcastRoomState(client.RoomID)
+			h.SendChatHistory(client)
 
 		case client := <-h.Unregister:
 			h.Mutex.Lock()
@@ -153,6 +163,7 @@ func (h *Hub) Run() {
 
 					// If host disconnected, assign new host or delete room
 					if room.HostID == client.ID {
+						h.stopVoiceRecordingLocked(room)
 						if len(room.Clients) > 0 {
 							// Choose any client as new host
 							for c := range room.Clients {
@@ -264,6 +275,14 @@ func (h *Hub) BroadcastChatMessage(roomID string, from string, text string) {
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 	}
 
+	// Save to persistent history
+	chatMsg := ChatMessage{
+		Username:  from,
+		Text:      text,
+		Timestamp: msg.Timestamp,
+	}
+	AppendChatMessage(roomID, chatMsg)
+
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		log.Println("Error marshalling chat message:", err)
@@ -276,6 +295,36 @@ func (h *Hub) BroadcastChatMessage(roomID string, from string, text string) {
 		default:
 			// Client channel full, unregistering is handled in writePump
 		}
+	}
+}
+
+func (h *Hub) SendChatHistory(client *Client) {
+	history := GetChatHistory(client.RoomID)
+	if len(history) == 0 {
+		return
+	}
+
+	historyBytes, err := json.Marshal(history)
+	if err != nil {
+		log.Println("Error marshalling chat history:", err)
+		return
+	}
+
+	msg := Message{
+		Type:    "chat_history",
+		Payload: historyBytes,
+	}
+
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("Error marshalling history message:", err)
+		return
+	}
+
+	select {
+	case client.Send <- msgBytes:
+	default:
+		// Send buffer full or client disconnected
 	}
 }
 
@@ -304,4 +353,100 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, us
 	// Start reading and writing routines
 	go client.writePump()
 	go client.readPump()
+}
+
+// BroadcastVoiceEvent sends voice events like voice_start/voice_stop to all clients in a room
+func (h *Hub) BroadcastVoiceEvent(roomID string, eventType string, username string) {
+	h.Mutex.RLock()
+	room, exists := h.Rooms[roomID]
+	h.Mutex.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	room.Mutex.RLock()
+	clients := make([]*Client, 0, len(room.Clients))
+	for c := range room.Clients {
+		clients = append(clients, c)
+	}
+	// Add file URL for voice_start events
+	var payloadBytes []byte
+	if eventType == "voice_start" && room.VoiceFilePath != "" {
+		type VoiceStartPayload struct {
+			FileUrl string `json:"file_url"`
+		}
+		payloadBytes, _ = json.Marshal(VoiceStartPayload{FileUrl: room.VoiceFilePath})
+	}
+	room.Mutex.RUnlock()
+
+	msg := Message{
+		Type:     eventType,
+		Username: username,
+		Payload:  payloadBytes,
+	}
+
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("Error marshalling voice event:", err)
+		return
+	}
+
+	for _, c := range clients {
+		select {
+		case c.Send <- msgBytes:
+		default:
+		}
+	}
+}
+
+// stopVoiceRecordingLocked stops recording, registers the track, and broadcasts voice_stop. Room mutex must be locked when calling.
+func (h *Hub) stopVoiceRecordingLocked(room *Room) {
+	if room.VoiceFile == nil {
+		return
+	}
+
+	_ = room.VoiceFile.Close()
+	room.VoiceFile = nil
+
+	durationMs := (time.Now().UnixNano() / int64(time.Millisecond)) - room.VoiceStartedAt
+	durationSec := int(durationMs / 1000)
+
+	log.Printf("Voice streaming stopped in room %s. Recorded duration: %ds", room.ID, durationSec)
+
+	filePath := room.VoiceFilePath
+	roomName := room.Name
+	hostID := room.HostID
+	roomID := room.ID
+
+	// Register track in DB asynchronously to keep websocket thread responsive
+	if durationSec > 2 {
+		hostUsername := "Host"
+		for c := range room.Clients {
+			if c.ID == hostID {
+				hostUsername = c.Username
+				break
+			}
+		}
+		go func() {
+			title := fmt.Sprintf("Guided Session - %s", roomName)
+			_, err := AddTrack(title, hostUsername, filePath, durationSec)
+			if err != nil {
+				log.Printf("Error registering recorded track: %v", err)
+			} else {
+				log.Printf("Recorded track registered successfully: %s", title)
+			}
+		}()
+	} else if filePath != "" {
+		go func() {
+			_ = os.Remove("." + filePath)
+			log.Printf("Removed short voice recording: .%s", filePath)
+		}()
+	}
+
+	room.VoiceFilePath = ""
+	room.VoiceStartedAt = 0
+
+	// Broadcast voice_stop asynchronously
+	go h.BroadcastVoiceEvent(roomID, "voice_stop", "")
 }

@@ -18,4 +18,5 @@ logs/
 backend/users.json
 backend/tracks.json
 backend/uploads/
-
+backend/meditation.db
+backend/*.json.bak
