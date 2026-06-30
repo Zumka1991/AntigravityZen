@@ -41,6 +41,15 @@ func InitDB(dbPath string) *sql.DB {
 			text TEXT NOT NULL,
 			timestamp INTEGER NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS global_chat_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL,
+			text TEXT NOT NULL,
+			timestamp INTEGER NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_global_chat_messages_id
+			ON global_chat_messages(id
+		);`,
 	}
 
 	for _, query := range queries {

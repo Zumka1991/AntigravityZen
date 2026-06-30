@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { RoomList } from './components/RoomList';
 import type { RoomInfo, Track } from './components/RoomList';
 import { MeditationRoom } from './components/MeditationRoom';
+import { GlobalChat } from './components/GlobalChat';
 import { translations } from './translations';
 import type { Language } from './translations';
 
@@ -781,14 +782,22 @@ function App() {
             </div>
           )
         ) : (
-          <RoomList
-            rooms={rooms}
-            tracks={tracks}
-            username={username}
-            onJoinRoom={handleJoinRoom}
-            onCreateRoom={handleCreateRoom}
-            t={t}
-          />
+          <>
+            <RoomList
+              rooms={rooms}
+              tracks={tracks}
+              username={username}
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              t={t}
+            />
+            <GlobalChat
+              apiBase={API_BASE}
+              token={token}
+              username={username}
+              t={t}
+            />
+          </>
         )}
       </main>
 
@@ -875,32 +884,45 @@ function App() {
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackFileLabel}
                 </label>
-                <input
-                  id="admin-track-file"
-                  type="file"
-                  accept="audio/mp3,audio/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const selectedFile = e.target.files[0];
-                      setTrackFile(selectedFile);
+                <div className="audio-file-picker">
+                  <input
+                    id="admin-track-file"
+                    className="audio-file-input"
+                    type="file"
+                    accept="audio/mp3,audio/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const selectedFile = e.target.files[0];
+                        setTrackFile(selectedFile);
 
-                      const audio = document.createElement('audio');
-                      const objectUrl = URL.createObjectURL(selectedFile);
-                      audio.preload = 'metadata';
-                      audio.onloadedmetadata = () => {
-                        if (Number.isFinite(audio.duration)) {
-                          setTrackDuration(Math.ceil(audio.duration).toString());
-                        }
-                        URL.revokeObjectURL(objectUrl);
-                      };
-                      audio.onerror = () => URL.revokeObjectURL(objectUrl);
-                      audio.src = objectUrl;
-                    }
-                  }}
-                  required
-                  disabled={isUploading}
-                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
-                />
+                        const audio = document.createElement('audio');
+                        const objectUrl = URL.createObjectURL(selectedFile);
+                        audio.preload = 'metadata';
+                        audio.onloadedmetadata = () => {
+                          if (Number.isFinite(audio.duration)) {
+                            setTrackDuration(Math.ceil(audio.duration).toString());
+                          }
+                          URL.revokeObjectURL(objectUrl);
+                        };
+                        audio.onerror = () => URL.revokeObjectURL(objectUrl);
+                        audio.src = objectUrl;
+                      }
+                    }}
+                    required
+                    disabled={isUploading}
+                  />
+                  <label htmlFor="admin-track-file" className="audio-file-button">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                    <span>{t.chooseAudioFile}</span>
+                  </label>
+                  <span className={`audio-file-name ${trackFile ? 'selected' : ''}`} title={trackFile?.name}>
+                    {trackFile?.name || t.audioFileNotSelected}
+                  </span>
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

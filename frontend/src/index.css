@@ -594,6 +594,85 @@ input[type="range"]:focus {
   border-radius: 12px;
 }
 
+/* Shared community chat on the lobby page */
+.global-chat {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  height: 430px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+.global-chat-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.global-chat-header h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.global-chat-header p {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.global-chat-live {
+  flex: none;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  color: var(--color-secondary);
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.16);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.global-chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.global-chat-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.global-chat-error {
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  margin-bottom: 0.65rem;
+}
+
+.global-chat .chat-input-area button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+}
+
 /* Meditation & Breath Visualizer */
 .meditation-stage {
   text-align: center;
@@ -841,12 +920,77 @@ body:has(.in-room) {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.audio-file-picker {
+  min-height: 48px;
+  padding: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  transition: var(--transition-smooth);
+}
+
+.audio-file-picker:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.audio-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.audio-file-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  color: #0d0a21;
+  background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
+  box-shadow: 0 5px 18px rgba(139, 92, 246, 0.22);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.audio-file-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 22px rgba(139, 92, 246, 0.32);
+}
+
+.audio-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
+.audio-file-name.selected {
+  color: var(--color-text-primary);
+}
+
 @media (max-width: 550px) {
   .admin-track-form {
     grid-template-columns: 1fr;
   }
   .admin-track-form .span-2 {
     grid-column: span 1 !important;
+  }
+
+  .audio-file-picker {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

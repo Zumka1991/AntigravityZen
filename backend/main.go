@@ -44,6 +44,8 @@ func main() {
 	r.GET("/api/tracks", handlers.GetTracksHandler(authManager))
 	r.POST("/api/tracks", handlers.AddTrackHandler(authManager))
 	r.DELETE("/api/tracks", handlers.DeleteTrackHandler(authManager))
+	r.GET("/api/global-chat", handlers.GetGlobalChatHandler(authManager))
+	r.POST("/api/global-chat", handlers.AddGlobalChatMessageHandler(authManager))
 
 	// WebSocket Route
 	r.GET("/ws", handlers.WSHandler(hub, authManager))

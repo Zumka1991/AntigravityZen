@@ -16,8 +16,8 @@ import (
 
 const maxTrackUploadSize = 100 << 20
 
-// authenticateTrackUser validates a session and returns its username.
-func authenticateTrackUser(c *gin.Context, authManager *room.AuthManager) (string, bool) {
+// authenticateUser validates a session and returns its username.
+func authenticateUser(c *gin.Context, authManager *room.AuthManager) (string, bool) {
 	token := c.GetHeader("Authorization")
 	if token == "" {
 		token = c.Query("token")
@@ -52,7 +52,7 @@ func GetTracksHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // AddTrackHandler handles POST /api/tracks
 func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, valid := authenticateTrackUser(c, authManager)
+		username, valid := authenticateUser(c, authManager)
 		if !valid {
 			return
 		}
@@ -122,7 +122,7 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // DeleteTrackHandler handles DELETE /api/tracks
 func DeleteTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, valid := authenticateTrackUser(c, authManager)
+		username, valid := authenticateUser(c, authManager)
 		if !valid {
 			return
 		}
