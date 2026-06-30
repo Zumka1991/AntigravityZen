@@ -41,6 +41,7 @@ func main() {
 	r.POST("/api/verify", handlers.VerifyHandler(authManager))
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))
+	r.POST("/api/rooms/access", handlers.RoomAccessHandler(hub, authManager))
 
 	r.GET("/api/tracks", handlers.GetTracksHandler(authManager))
 	r.POST("/api/tracks", handlers.AddTrackHandler(authManager))

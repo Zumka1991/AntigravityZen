@@ -27,6 +27,7 @@ export interface RoomInfo {
   status: string;
   activeTrack?: Track;
   background?: MeditationBackground;
+  isProtected: boolean;
 }
 
 interface RoomListProps {
@@ -34,8 +35,10 @@ interface RoomListProps {
   tracks: Track[];
   backgrounds: MeditationBackground[];
   username: string;
-  onJoinRoom: (roomId: string) => void;
-  onCreateRoom: (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string) => void;
+  onJoinRoom: (roomId: string, password?: string) => Promise<void>;
+  onCreateRoom: (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string, password?: string) => Promise<void>;
+  requestedRoomId?: string | null;
+  onRequestedRoomHandled?: () => void;
   t: typeof translations.en;
 }
 
@@ -46,10 +49,18 @@ export const RoomList: React.FC<RoomListProps> = ({
   username,
   onJoinRoom,
   onCreateRoom,
+  requestedRoomId,
+  onRequestedRoomHandled,
   t,
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roomName, setRoomName] = useState('');
+  const [protectRoom, setProtectRoom] = useState(false);
+  const [roomPassword, setRoomPassword] = useState('');
+  const [joinTarget, setJoinTarget] = useState<RoomInfo | null>(null);
+  const [joinPassword, setJoinPassword] = useState('');
+  const [accessError, setAccessError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [duration, setDuration] = useState(60);
   const ambientTracks = tracks.filter(t => !t.ownerUsername || t.isPublic);
   const recordedTracks = tracks.filter(t => !!t.ownerUsername && !t.isPublic);
@@ -122,14 +133,51 @@ export const RoomList: React.FC<RoomListProps> = ({
     }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomName.trim()) return;
     const voiceId = selectedVoiceTrackId !== 'none' ? selectedVoiceTrackId : undefined;
-    onCreateRoom(roomName.trim(), duration, selectedTrackId, selectedBackgroundId, voiceId);
-    setShowCreateModal(false);
-    setRoomName('');
+    setIsSubmitting(true);
+    setAccessError('');
+    try {
+      await onCreateRoom(roomName.trim(), duration, selectedTrackId, selectedBackgroundId, voiceId, protectRoom ? roomPassword : undefined);
+      setShowCreateModal(false);
+      setRoomName('');
+      setRoomPassword('');
+      setProtectRoom(false);
+    } catch (error) {
+      setAccessError(error instanceof Error ? error.message : t.roomAccessError);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const handleJoin = async (room: RoomInfo, password?: string) => {
+    if (room.isProtected && !password) {
+      setJoinTarget(room);
+      setAccessError('');
+      return;
+    }
+    setIsSubmitting(true);
+    setAccessError('');
+    try {
+      await onJoinRoom(room.id, password);
+      setJoinTarget(null);
+      setJoinPassword('');
+    } catch {
+      setAccessError(t.incorrectRoomPassword);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!requestedRoomId) return;
+    const requestedRoom = rooms.find((room) => room.id === requestedRoomId);
+    if (!requestedRoom) return;
+    onRequestedRoomHandled?.();
+    void handleJoin(requestedRoom);
+  }, [requestedRoomId, rooms]);
 
   // Helper to translate track names
   const getTrackTitle = (track: Track | undefined) => {
@@ -198,9 +246,10 @@ export const RoomList: React.FC<RoomListProps> = ({
             <div key={room.id} className="room-card glass-panel">
               <div className="room-card-header">
                 <h3>{room.name}</h3>
-                <span className={`status-badge ${room.status}`}>
-                  {getStatusText(room.status)}
-                </span>
+                <div className="room-card-badges">
+                  {room.isProtected && <span className="protected-badge" title={t.protectedRoom}>⌁ {t.privateRoom}</span>}
+                  <span className={`status-badge ${room.status}`}>{getStatusText(room.status)}</span>
+                </div>
               </div>
 
               <div className="room-card-meta">
@@ -222,7 +271,7 @@ export const RoomList: React.FC<RoomListProps> = ({
                 </span>
                 <button
                   className="btn btn-primary"
-                  onClick={() => onJoinRoom(room.id)}
+                  onClick={() => handleJoin(room)}
                   style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem', borderRadius: '10px' }}
                 >
                   {t.joinRoom}
@@ -252,6 +301,39 @@ export const RoomList: React.FC<RoomListProps> = ({
                   required
                   autoFocus
                 />
+              </div>
+
+              <div className={`room-protection ${protectRoom ? 'enabled' : ''}`}>
+                <label className="room-protection-toggle">
+                  <input
+                    type="checkbox"
+                    checked={protectRoom}
+                    onChange={(event) => {
+                      setProtectRoom(event.target.checked);
+                      setAccessError('');
+                    }}
+                  />
+                  <span className="toggle-track" aria-hidden="true"><span /></span>
+                  <span>
+                    <strong>{t.protectRoom}</strong>
+                    <small>{t.protectRoomHint}</small>
+                  </span>
+                </label>
+                {protectRoom && (
+                  <input
+                    type="password"
+                    name="new-room-access-code"
+                    value={roomPassword}
+                    onChange={(event) => setRoomPassword(event.target.value)}
+                    placeholder={t.roomPasswordPlaceholder}
+                    minLength={4}
+                    required
+                    autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    data-bwignore="true"
+                  />
+                )}
               </div>
 
               <div className="form-group">
@@ -478,9 +560,41 @@ export const RoomList: React.FC<RoomListProps> = ({
                 )}
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
+              {accessError && <div className="notice notice-error">{accessError}</div>}
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ marginTop: '0.5rem' }}>
                 {t.createAndEnterRoom}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {joinTarget && (
+        <div className="modal-overlay" onClick={() => setJoinTarget(null)}>
+          <div className="modal-content glass-panel password-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setJoinTarget(null)}>&times;</button>
+            <div className="password-modal-icon">⌁</div>
+            <h2>{t.enterRoomPassword}</h2>
+            <p>{t.enterRoomPasswordHint.replace('{room}', joinTarget.name)}</p>
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              handleJoin(joinTarget, joinPassword);
+            }}>
+              <input
+                type="password"
+                name="room-access-code"
+                value={joinPassword}
+                onChange={(event) => setJoinPassword(event.target.value)}
+                placeholder={t.roomPasswordPlaceholder}
+                autoFocus
+                required
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore="true"
+              />
+              {accessError && <div className="notice notice-error">{accessError}</div>}
+              <button className="btn btn-primary" disabled={isSubmitting}>{t.unlockRoom}</button>
             </form>
           </div>
         </div>

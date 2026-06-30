@@ -20,6 +20,7 @@ func WSHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 		trackID := c.Query("trackId")
 		voiceTrackID := c.Query("voiceTrackId")
 		backgroundID := c.Query("backgroundId")
+		accessTicket := c.Query("accessTicket")
 
 		if roomID == "" || token == "" || clientID == "" {
 			c.String(http.StatusBadRequest, "Missing roomId, token, or clientId parameters")
@@ -29,6 +30,10 @@ func WSHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 		username, valid := authManager.ValidateToken(token)
 		if !valid {
 			c.String(http.StatusUnauthorized, "Unauthorized session")
+			return
+		}
+		if !hub.ValidateRoomAccess(roomID, accessTicket, username, clientID) {
+			c.String(http.StatusForbidden, "Room password required")
 			return
 		}
 

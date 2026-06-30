@@ -63,12 +63,13 @@ function App() {
     return id;
   });
 
-  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string; backgroundId?: string } | null>(null);
+  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string; backgroundId?: string; accessTicket?: string } | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [backgrounds, setBackgrounds] = useState<MeditationBackground[]>([]);
   const sharedTracks = tracks.filter((track) => !track.ownerUsername || track.isPublic);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [requestedRoomId, setRequestedRoomId] = useState<string | null>(null);
   
   // WebSocket and real-time state
   const [roomState, setRoomState] = useState<any>(null);
@@ -174,7 +175,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const roomIdParam = params.get('roomId');
     if (roomIdParam) {
-      setActiveRoom({ id: roomIdParam, name: null });
+      setRequestedRoomId(roomIdParam);
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
     }
@@ -214,7 +215,8 @@ function App() {
       const trackParam = activeRoom.trackId ? `&trackId=${activeRoom.trackId}` : '';
       const voiceTrackParam = activeRoom.voiceTrackId ? `&voiceTrackId=${activeRoom.voiceTrackId}` : '';
       const backgroundParam = activeRoom.backgroundId ? `&backgroundId=${activeRoom.backgroundId}` : '';
-      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}${voiceTrackParam}${backgroundParam}`;
+      const accessParam = activeRoom.accessTicket ? `&accessTicket=${encodeURIComponent(activeRoom.accessTicket)}` : '';
+      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}${voiceTrackParam}${backgroundParam}${accessParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -330,13 +332,29 @@ function App() {
     };
   }, [activeRoom, token, clientId]);
 
-  const handleJoinRoom = (roomId: string) => {
-    setActiveRoom({ id: roomId, name: null });
+  const requestRoomAccess = async (roomId: string, password: string, creating: boolean) => {
+    const response = await fetch(`${API_BASE}/rooms/access`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ roomId, password, clientId, creating }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t.roomAccessError);
+    return data.ticket as string;
   };
 
-  const handleCreateRoom = (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string) => {
+  const handleJoinRoom = async (roomId: string, password?: string) => {
+    const accessTicket = password ? await requestRoomAccess(roomId, password, false) : undefined;
+    setActiveRoom({ id: roomId, name: null, accessTicket });
+  };
+
+  const handleCreateRoom = async (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string, password?: string) => {
     const roomId = generateId().slice(0, 8);
-    setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId, backgroundId });
+    const accessTicket = password ? await requestRoomAccess(roomId, password, true) : undefined;
+    setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId, backgroundId, accessTicket });
   };
 
   const handleLeaveRoom = () => {
@@ -748,6 +766,8 @@ function App() {
               username={username}
               onJoinRoom={handleJoinRoom}
               onCreateRoom={handleCreateRoom}
+              requestedRoomId={requestedRoomId}
+              onRequestedRoomHandled={() => setRequestedRoomId(null)}
               t={t}
             />
             <GlobalChat

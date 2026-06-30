@@ -22,6 +22,7 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 			Status      string                     `json:"status"`
 			ActiveTrack *room.Track                `json:"activeTrack,omitempty"`
 			Background  *room.MeditationBackground `json:"background,omitempty"`
+			IsProtected bool                       `json:"isProtected"`
 		}
 
 		rooms := make([]RoomInfo, 0, len(hub.Rooms))
@@ -35,6 +36,7 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 				Status:      rm.Status,
 				ActiveTrack: rm.ActiveTrack,
 				Background:  rm.Background,
+				IsProtected: len(rm.PasswordHash) > 0,
 			})
 			rm.Mutex.RUnlock()
 		}

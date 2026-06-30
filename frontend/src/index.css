@@ -1856,6 +1856,140 @@ label {
   font-size: 1.12rem;
 }
 
+.room-card-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.protected-badge {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(169, 153, 255, 0.18);
+  border-radius: 99px;
+  color: var(--color-primary-hover);
+  background: rgba(169, 153, 255, 0.08);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.room-protection {
+  padding: 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.018);
+  transition: border-color var(--transition-smooth), background var(--transition-smooth);
+}
+
+.room-protection.enabled {
+  border-color: rgba(169, 153, 255, 0.34);
+  background: rgba(169, 153, 255, 0.045);
+}
+
+.room-protection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.room-protection-toggle > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.room-protection-toggle > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.room-protection-toggle strong {
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+}
+
+.room-protection-toggle small {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+.toggle-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background var(--transition-smooth);
+}
+
+.toggle-track > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: transform var(--transition-smooth), background var(--transition-smooth);
+}
+
+.room-protection-toggle input:checked + .toggle-track {
+  background: var(--color-primary);
+}
+
+.room-protection-toggle input:checked + .toggle-track > span {
+  background: #11131c;
+  transform: translateX(16px);
+}
+
+.room-protection-toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--color-primary-hover);
+  outline-offset: 3px;
+}
+
+.room-protection > input {
+  width: 100%;
+  margin-top: 0.8rem;
+}
+
+.password-modal {
+  max-width: 410px;
+  align-items: center;
+  text-align: center;
+}
+
+.password-modal-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(169, 153, 255, 0.2);
+  border-radius: 16px;
+  color: var(--color-primary-hover);
+  background: rgba(169, 153, 255, 0.08);
+  font-size: 1.5rem;
+  place-items: center;
+}
+
+.password-modal > p {
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+}
+
+.password-modal form {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
 .status-badge,
 .badge-status {
   padding: 0.3rem 0.6rem;

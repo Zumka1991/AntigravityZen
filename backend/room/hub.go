@@ -90,22 +90,27 @@ type Room struct {
 	VoiceFile      *os.File
 	VoiceFilePath  string
 	VoiceStartedAt int64 // Unix timestamp in ms
+	PasswordHash   []byte
 	Mutex          sync.RWMutex
 }
 
 // Hub maintains the state of active rooms and clients
 type Hub struct {
-	Rooms      map[string]*Room
-	Register   chan *Client
-	Unregister chan *Client
-	Mutex      sync.RWMutex
+	Rooms            map[string]*Room
+	Register         chan *Client
+	Unregister       chan *Client
+	PendingPasswords map[string][]byte
+	AccessTickets    map[string]RoomAccessTicket
+	Mutex            sync.RWMutex
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		Rooms:      make(map[string]*Room),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
+		Rooms:            make(map[string]*Room),
+		Register:         make(chan *Client),
+		Unregister:       make(chan *Client),
+		PendingPasswords: make(map[string][]byte),
+		AccessTickets:    make(map[string]RoomAccessTicket),
 	}
 }
 
@@ -135,16 +140,18 @@ func (h *Hub) Run() {
 				}
 				// First client in the room becomes the host
 				room = &Room{
-					ID:          client.RoomID,
-					Name:        name,
-					HostID:      client.ID,
-					Clients:     make(map[*Client]bool),
-					Status:      "lobby",
-					ActiveTrack: track,
-					VoiceTrack:  voiceTrack,
-					Background:  background,
-					Duration:    duration,
+					ID:           client.RoomID,
+					Name:         name,
+					HostID:       client.ID,
+					Clients:      make(map[*Client]bool),
+					Status:       "lobby",
+					ActiveTrack:  track,
+					VoiceTrack:   voiceTrack,
+					Background:   background,
+					Duration:     duration,
+					PasswordHash: h.PendingPasswords[client.RoomID],
 				}
+				delete(h.PendingPasswords, client.RoomID)
 				h.Rooms[client.RoomID] = room
 				trackTitle := "none"
 				if track != nil {
@@ -193,6 +200,7 @@ func (h *Hub) Run() {
 						} else {
 							// Delete room
 							delete(h.Rooms, client.RoomID)
+							delete(h.PendingPasswords, client.RoomID)
 							log.Printf("Deleted empty room %s", client.RoomID)
 							room.Mutex.Unlock()
 							h.Mutex.Unlock()
