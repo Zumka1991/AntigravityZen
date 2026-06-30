@@ -22,15 +22,27 @@ func main() {
 	os.MkdirAll("./uploads/recordings", 0755)
 
 	authManager := room.NewAuthManager(db)
-	authManager.EnsureAdminCreated("Pifagor1991GG")
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		log.Fatal("ADMIN_PASSWORD environment variable is required")
+	}
+	authManager.EnsureAdminCreated(adminPassword)
 
 	// Set Gin mode
-	gin.SetMode(gin.DebugMode)
+	ginMode := os.Getenv("GIN_MODE")
+	if ginMode == "" {
+		ginMode = gin.ReleaseMode
+	}
+	gin.SetMode(ginMode)
 
 	r := gin.Default()
 
 	// CORS Middleware
 	r.Use(corsMiddleware())
+
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 
 	// Static files serving for uploads
 	r.Static("/uploads", "./uploads")

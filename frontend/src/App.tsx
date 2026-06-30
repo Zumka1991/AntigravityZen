@@ -316,7 +316,9 @@ function App() {
 
       ws.onerror = (err) => {
         console.error('WebSocket error:', err);
-        setConnectionError('WebSocket connection error. Please make sure the Go backend is running at http://localhost:8080.');
+        setConnectionError(lang === 'ru'
+          ? 'Ошибка подключения. Пожалуйста, попробуйте ещё раз.'
+          : 'WebSocket connection error. Please try again.');
       };
     } catch (err: any) {
       console.error('Failed to create WebSocket:', err);

@@ -1,0 +1,10 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    pull_policy: build
+
+  frontend:
+    build:
+      context: ./frontend
+    pull_policy: build

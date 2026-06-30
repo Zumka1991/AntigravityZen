@@ -14,9 +14,12 @@ logs/
 .vscode/
 .idea/
 
-# Database files
+# Local configuration and application data
+.env
+.env.production
+data/
 backend/users.json
 backend/tracks.json
-backend/uploads/
 backend/meditation.db
+backend/uploads/
 backend/*.json.bak

@@ -281,8 +281,8 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         console.error('Microphone access failed:', err);
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           alert(isRu 
-            ? 'Доступ к микрофону заблокирован браузером. Пожалуйста, нажмите на значок замочка в адресной строке (слева от localhost:5173) и включите микрофон.'
-            : 'Microphone access is blocked by the browser. Please click the lock icon in the address bar (left of localhost:5173) and enable the microphone.');
+            ? 'Доступ к микрофону заблокирован браузером. Нажмите на значок замочка в адресной строке и разрешите доступ к микрофону.'
+            : 'Microphone access is blocked. Click the lock icon in the address bar and allow microphone access.');
         } else {
           alert(t.micAccessError || 'Could not access microphone.');
         }

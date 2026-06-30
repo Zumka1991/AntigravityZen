@@ -1,18 +1,67 @@
+name: zenworld
+
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    restart: always
+    image: ghcr.io/${GHCR_OWNER:-zumka1991}/antigravityzen-backend:${IMAGE_TAG:-latest}
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      GIN_MODE: release
+      GOMEMLIMIT: 220MiB
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - backend_data:/data
+    restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-zumka1991}/antigravityzen-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 64m
+    pids_limit: 50
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      DOMAIN: ${DOMAIN:-zenworld.ru}
     ports:
-      - "5173:80"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
-      - backend
-    restart: always
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 128m
+    pids_limit: 100
+    networks:
+      - app
+
+networks:
+  app:
+
+volumes:
+  backend_data:
+  caddy_data:
+  caddy_config:
