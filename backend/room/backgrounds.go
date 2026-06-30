@@ -22,6 +22,11 @@ var defaultMeditationBackgrounds = []MeditationBackground{
 	{ID: "zen-garden", Title: "Zen Garden", ImageURL: "/backgrounds/zen-garden.jpg", IsDefault: true},
 	{ID: "forest-light", Title: "Forest Light", ImageURL: "/backgrounds/forest-light.jpg", IsDefault: true},
 	{ID: "cosmic-drift", Title: "Cosmic Drift", ImageURL: "/backgrounds/cosmic-drift.jpg", IsDefault: true},
+	{ID: "ocean-dawn", Title: "Ocean Dawn", ImageURL: "/backgrounds/ocean-dawn.jpg", IsDefault: true},
+	{ID: "twilight-dunes", Title: "Twilight Dunes", ImageURL: "/backgrounds/twilight-dunes.jpg", IsDefault: true},
+	{ID: "hidden-waterfall", Title: "Hidden Waterfall", ImageURL: "/backgrounds/hidden-waterfall.jpg", IsDefault: true},
+	{ID: "aurora-shore", Title: "Aurora Shore", ImageURL: "/backgrounds/aurora-shore.jpg", IsDefault: true},
+	{ID: "dawn-meadow", Title: "Dawn Meadow", ImageURL: "/backgrounds/dawn-meadow.jpg", IsDefault: true},
 }
 
 func InitBackgrounds() {
@@ -52,6 +57,11 @@ func GetBackgrounds() []MeditationBackground {
 				WHEN 'zen-garden' THEN 3
 				WHEN 'forest-light' THEN 4
 				WHEN 'cosmic-drift' THEN 5
+				WHEN 'ocean-dawn' THEN 6
+				WHEN 'twilight-dunes' THEN 7
+				WHEN 'hidden-waterfall' THEN 8
+				WHEN 'aurora-shore' THEN 9
+				WHEN 'dawn-meadow' THEN 10
 				ELSE 100
 			END,
 			title COLLATE NOCASE
