@@ -82,6 +82,9 @@ func (h *Hub) ValidateRoomAccess(roomID, ticket, username, clientID string) bool
 	if !protected {
 		return true
 	}
+	if IsRoomMember(roomID, username, clientID) {
+		return true
+	}
 
 	access, exists := h.AccessTickets[ticket]
 	if !exists || access.RoomID != roomID || access.Username != username || access.ClientID != clientID {

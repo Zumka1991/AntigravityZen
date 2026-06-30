@@ -11,15 +11,18 @@ import (
 )
 
 func main() {
-	hub := room.NewHub()
-	go hub.Run()
-
 	db := room.InitDB("meditation.db")
 	room.MigrateJSONToDB(db)
 	room.InitTracks()
 	room.InitChat()
 	room.InitBackgrounds()
 	os.MkdirAll("./uploads/recordings", 0755)
+
+	hub := room.NewHub()
+	if err := hub.LoadPersistentRooms(); err != nil {
+		log.Printf("Could not restore rooms: %v", err)
+	}
+	go hub.Run()
 
 	authManager := room.NewAuthManager(db)
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
@@ -51,6 +54,7 @@ func main() {
 	r.POST("/api/register", handlers.RegisterHandler(authManager))
 	r.POST("/api/login", handlers.LoginHandler(authManager))
 	r.POST("/api/verify", handlers.VerifyHandler(authManager))
+	r.POST("/api/logout", handlers.LogoutHandler(authManager))
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))
 	r.POST("/api/rooms/access", handlers.RoomAccessHandler(hub, authManager))
@@ -67,8 +71,12 @@ func main() {
 	// WebSocket Route
 	r.GET("/ws", handlers.WSHandler(hub, authManager))
 
-	log.Println("Server started on :8080")
-	if err := r.Run(":8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server started on :%s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
 }

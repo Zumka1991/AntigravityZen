@@ -83,3 +83,12 @@ func VerifyHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		})
 	}
 }
+
+// LogoutHandler revokes a durable session token.
+func LogoutHandler(authManager *room.AuthManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		authManager.Logout(token)
+		c.JSON(http.StatusOK, gin.H{"status": "logged_out"})
+	}
+}

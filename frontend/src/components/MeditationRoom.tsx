@@ -62,6 +62,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [voiceVolume, setVoiceVolume] = useState(1.0);
   const [showVolumeControls, setShowVolumeControls] = useState(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const serverOffsetRef = useRef(0);
 
   const handleMusicVolumeChange = (newVal: number) => {
     setMusicVolume(newVal);
@@ -353,7 +354,19 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         console.log("[Voice] Static pre-recorded playback playing file:", voiceFileUrl);
         if (voiceFileUrl) {
           audio.src = voiceFileUrl;
+          const seekToRoomPosition = () => {
+            if (!roomState.startedAt) return;
+            const elapsedSeconds = Math.max(
+              0,
+              (Date.now() + serverOffsetRef.current - roomState.startedAt) / 1000,
+            );
+            if (Number.isFinite(audio.duration) && audio.duration > 0) {
+              audio.currentTime = Math.min(elapsedSeconds, Math.max(0, audio.duration - 0.1));
+            }
+          };
+          audio.addEventListener('loadedmetadata', seekToRoomPosition);
           audio.play().catch(e => console.warn("[Voice] Pre-recorded play failed:", e));
+          seekToRoomPosition();
         }
         return () => {
           audio.pause();
@@ -461,7 +474,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         }
       }
     }
-  }, [voiceNarrator, voiceFileUrl, registerVoiceListener, username, voiceVolume, isMicrophoneActive, isVoiceStatic]);
+  }, [voiceNarrator, voiceFileUrl, registerVoiceListener, username, voiceVolume, isMicrophoneActive, isVoiceStatic, roomState.startedAt]);
 
   const isHost = roomState.hostId === clientId;
   const isPlaying = roomState.status === 'playing';
@@ -514,8 +527,6 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       })
       .catch((err) => console.error('Could not copy text: ', err));
   };
-
-  const serverOffsetRef = useRef(0);
 
   // Sync server offset when roomState update arrives
   useEffect(() => {

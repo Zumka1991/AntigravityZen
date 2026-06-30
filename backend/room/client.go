@@ -222,25 +222,31 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			return
 		}
 
-		room.Status = "playing"
-		room.ActiveTrack = track
-		room.Duration = payload.Duration
-		room.StartedAt = time.Now().UnixNano() / int64(time.Millisecond)
-
 		// Check if a pre-recorded voice track was selected
 		var voiceTrack *Track
 		if payload.VoiceTrackID != "" {
 			voiceTrack = FindTrack(payload.VoiceTrackID)
-			if voiceTrack != nil {
-				room.VoiceFilePath = voiceTrack.AudioURL
-				room.VoiceStartedAt = room.StartedAt
-			}
+		}
+
+		room.Status = "playing"
+		room.ActiveTrack = track
+		room.VoiceTrack = voiceTrack
+		room.Duration = payload.Duration
+		room.StartedAt = time.Now().UnixNano() / int64(time.Millisecond)
+		startedAt := room.StartedAt
+
+		if voiceTrack != nil {
+			room.VoiceFilePath = voiceTrack.AudioURL
+			room.VoiceStartedAt = room.StartedAt
 		} else {
 			room.VoiceFilePath = ""
 			room.VoiceStartedAt = 0
 		}
 		room.Mutex.Unlock()
 
+		if err := PersistRoom(room); err != nil {
+			log.Printf("Could not persist started meditation in room %s: %v", room.ID, err)
+		}
 		log.Printf("Meditation started in room %s. Track: %s, Duration: %ds", room.ID, track.Title, payload.Duration)
 		c.Hub.BroadcastRoomState(c.RoomID)
 
@@ -249,26 +255,7 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			c.Hub.BroadcastVoiceEvent(c.RoomID, "voice_start", c.Username)
 		}
 
-		// Start a timer to end the meditation when it completes
-		go func(r *Room, duration int, startMs int64) {
-			time.Sleep(time.Duration(duration) * time.Second)
-			r.Mutex.Lock()
-			// Check if this specific meditation is still active
-			if r.Status == "playing" && r.StartedAt == startMs {
-				hasVoice := r.VoiceFilePath != ""
-				r.Status = "finished"
-				r.VoiceFilePath = ""
-				r.VoiceStartedAt = 0
-				r.Mutex.Unlock()
-				c.Hub.BroadcastRoomState(r.ID)
-				log.Printf("Meditation naturally completed in room %s", r.ID)
-				if hasVoice {
-					c.Hub.BroadcastVoiceEvent(r.ID, "voice_stop", "")
-				}
-			} else {
-				r.Mutex.Unlock()
-			}
-		}(room, payload.Duration, room.StartedAt)
+		go c.Hub.scheduleRoomCompletion(room.ID, startedAt, payload.Duration)
 
 	case "stop":
 		room.Mutex.Lock()
@@ -280,9 +267,15 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 		c.Hub.stopVoiceRecordingLocked(room)
 		room.Status = "lobby"
 		room.ActiveTrack = nil
+		room.VoiceTrack = nil
+		room.VoiceFilePath = ""
+		room.VoiceStartedAt = 0
 		room.StartedAt = 0
 		room.Mutex.Unlock()
 
+		if err := PersistRoom(room); err != nil {
+			log.Printf("Could not persist stopped meditation in room %s: %v", room.ID, err)
+		}
 		log.Printf("Meditation stopped in room %s", room.ID)
 		c.Hub.BroadcastRoomState(c.RoomID)
 

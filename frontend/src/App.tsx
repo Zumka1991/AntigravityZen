@@ -5,6 +5,7 @@ import type { MeditationBackground } from './components/RoomList';
 import { MeditationRoom } from './components/MeditationRoom';
 import { GlobalChat } from './components/GlobalChat';
 import { BackgroundManager } from './components/BackgroundManager';
+import { AboutPage } from './components/AboutPage';
 import { translations } from './translations';
 import type { Language } from './translations';
 
@@ -22,6 +23,26 @@ const port = typeof window !== 'undefined' && window.location.port ? `:${window.
 const API_BASE = `${apiProtocol}//${hostname}${port}/api`;
 const WS_BASE = `${wsProtocol}//${hostname}${port}/ws`;
 
+type ActiveRoom = {
+  id: string;
+  name: string | null;
+  duration?: number;
+  trackId?: string;
+  voiceTrackId?: string;
+  backgroundId?: string;
+  accessTicket?: string;
+};
+
+const restoreActiveRoom = (): ActiveRoom | null => {
+  try {
+    const stored = sessionStorage.getItem('zen_active_room');
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    sessionStorage.removeItem('zen_active_room');
+    return null;
+  }
+};
+
 function App() {
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState('');
@@ -35,6 +56,7 @@ function App() {
 
   // Shared sound library states
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [trackTitle, setTrackTitle] = useState('');
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
@@ -63,7 +85,7 @@ function App() {
     return id;
   });
 
-  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string; backgroundId?: string; accessTicket?: string } | null>(null);
+  const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(restoreActiveRoom);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [backgrounds, setBackgrounds] = useState<MeditationBackground[]>([]);
@@ -75,6 +97,7 @@ function App() {
   const [roomState, setRoomState] = useState<any>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const leavingRoomRef = useRef(false);
   const [voiceNarrator, setVoiceNarrator] = useState<string | null>(null);
   const [voiceFileUrl, setVoiceFileUrl] = useState<string | null>(null);
   const [isVoiceStatic, setIsVoiceStatic] = useState(false);
@@ -117,8 +140,13 @@ function App() {
         }
       } catch (err) {
         console.error('Failed to verify token:', err);
-        localStorage.removeItem('zen_token');
-        localStorage.removeItem('zen_username');
+        // A deploy may briefly make the API unavailable. Keep the durable
+        // credentials so the room can reconnect when the backend returns.
+        const savedUsername = localStorage.getItem('zen_username');
+        if (savedUsername) {
+          setToken(savedToken);
+          setUsername(savedUsername);
+        }
       } finally {
         setIsCheckingToken(false);
       }
@@ -126,6 +154,14 @@ function App() {
 
     verifyToken();
   }, []);
+
+  useEffect(() => {
+    if (activeRoom) {
+      sessionStorage.setItem('zen_active_room', JSON.stringify(activeRoom));
+    } else {
+      sessionStorage.removeItem('zen_active_room');
+    }
+  }, [activeRoom]);
 
   // Fetch initial tracks and rooms when logged in
   const fetchRooms = async () => {
@@ -210,7 +246,24 @@ function App() {
       return;
     }
 
-    try {
+    let reconnectTimer: number | undefined;
+    let reconnectAttempt = 0;
+    let shouldReconnect = true;
+    leavingRoomRef.current = false;
+
+    const scheduleReconnect = () => {
+      if (!shouldReconnect || leavingRoomRef.current) return;
+      const delay = Math.min(1000 * (2 ** reconnectAttempt), 10000);
+      reconnectAttempt += 1;
+      setConnectionError(lang === 'ru'
+        ? 'Соединение восстанавливается…'
+        : 'Reconnecting…');
+      reconnectTimer = window.setTimeout(connect, delay);
+    };
+
+    const connect = () => {
+      if (!shouldReconnect) return;
+      try {
       const durationParam = activeRoom.duration ? `&duration=${activeRoom.duration}` : '';
       const trackParam = activeRoom.trackId ? `&trackId=${activeRoom.trackId}` : '';
       const voiceTrackParam = activeRoom.voiceTrackId ? `&voiceTrackId=${activeRoom.voiceTrackId}` : '';
@@ -222,6 +275,7 @@ function App() {
 
       ws.onopen = () => {
         console.log('WebSocket connected to room:', activeRoom.id);
+        reconnectAttempt = 0;
         setConnectionError(null);
       };
 
@@ -242,12 +296,9 @@ function App() {
                   setIsVoiceStatic(true);
                   setVoiceNarrator(payload.voiceTrack.ownerUsername || 'recorded');
                 } else if (payload.status !== 'playing') {
-                  // Only clear voice state from voiceTrack; live voice_stop handles live streams
-                  if (payload.voiceTrack) {
-                    setVoiceNarrator(null);
-                    setVoiceFileUrl(null);
-                    setIsVoiceStatic(false);
-                  }
+                  setVoiceNarrator(null);
+                  setVoiceFileUrl(null);
+                  setIsVoiceStatic(false);
                 }
                 break;
               }
@@ -307,11 +358,15 @@ function App() {
 
       ws.onclose = (event) => {
         console.log('WebSocket connection closed:', event.code, event.reason);
-        if (event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
-          setConnectionError(`Connection lost (Code: ${event.code}). Reason: ${event.reason || 'Server error'}`);
+        if (wsRef.current === ws) {
+          wsRef.current = null;
         }
-        setActiveRoom(null);
-        setRoomState(null);
+        // Live microphone audio cannot survive a backend restart.
+        // Static voice state is restored by the next room_state message.
+        setVoiceNarrator(null);
+        setVoiceFileUrl(null);
+        setIsVoiceStatic(false);
+        scheduleReconnect();
       };
 
       ws.onerror = (err) => {
@@ -320,19 +375,26 @@ function App() {
           ? 'Ошибка подключения. Пожалуйста, попробуйте ещё раз.'
           : 'WebSocket connection error. Please try again.');
       };
-    } catch (err: any) {
-      console.error('Failed to create WebSocket:', err);
-      setConnectionError(`Failed to establish connection: ${err.message || err}`);
-      setActiveRoom(null);
-      setRoomState(null);
-    }
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      } catch (err: any) {
+        console.error('Failed to create WebSocket:', err);
+        scheduleReconnect();
       }
     };
-  }, [activeRoom, token, clientId]);
+
+    connect();
+
+    return () => {
+      shouldReconnect = false;
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+      }
+      const ws = wsRef.current;
+      wsRef.current = null;
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [activeRoom, token, clientId, lang]);
 
   const requestRoomAccess = async (roomId: string, password: string, creating: boolean) => {
     const response = await fetch(`${API_BASE}/rooms/access`, {
@@ -360,6 +422,7 @@ function App() {
   };
 
   const handleLeaveRoom = () => {
+    leavingRoomRef.current = true;
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -414,6 +477,13 @@ function App() {
   };
 
   const handleLogout = () => {
+    leavingRoomRef.current = true;
+    if (token) {
+      void fetch(`${API_BASE}/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch((err) => console.error('Logout request failed:', err));
+    }
     localStorage.removeItem('zen_token');
     localStorage.removeItem('zen_username');
     setToken(null);
@@ -668,7 +738,14 @@ function App() {
 
       {/* Main Header */}
       <header className="app-header main-header">
-        <button className="brand brand-button" onClick={handleLeaveRoom} aria-label="ZenWorld">
+        <button
+          className="brand brand-button"
+          onClick={() => {
+            setShowAbout(false);
+            handleLeaveRoom();
+          }}
+          aria-label="ZenWorld"
+        >
           <div className="brand-icon" />
           <span>ZenWorld</span>
         </button>
@@ -688,6 +765,14 @@ function App() {
               EN
             </button>
           </div>
+          {!activeRoom && token && (
+            <button
+              className={`btn btn-quiet ${showAbout ? 'active' : ''}`}
+              onClick={() => setShowAbout((value) => !value)}
+            >
+              {lang === 'ru' ? 'О проекте' : 'About'}
+            </button>
+          )}
           {!activeRoom && token && (
             <button 
               className="btn btn-quiet"
@@ -759,6 +844,8 @@ function App() {
               </button>
             </div>
           )
+        ) : showAbout ? (
+          <AboutPage language={lang} onBack={() => setShowAbout(false)} />
         ) : (
           <>
             <RoomList

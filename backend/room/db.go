@@ -13,10 +13,15 @@ var dbConn *sql.DB
 
 // InitDB initializes SQLite and creates tables
 func InitDB(dbPath string) *sql.DB {
-	db, err := sql.Open("sqlite3", dbPath)
+	dsn := dbPath
+	if dbPath != ":memory:" {
+		dsn += "?_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL"
+	}
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
+	db.SetMaxOpenConns(10)
 
 	// Create tables
 	queries := []string{
@@ -24,6 +29,14 @@ func InitDB(dbPath string) *sql.DB {
 			username TEXT PRIMARY KEY,
 			password_hash TEXT NOT NULL,
 			salt TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			token TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			expires_at INTEGER NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
+			ON sessions(expires_at
 		);`,
 		`CREATE TABLE IF NOT EXISTS tracks (
 			id TEXT PRIMARY KEY,
@@ -56,6 +69,30 @@ func InitDB(dbPath string) *sql.DB {
 			image_url TEXT NOT NULL,
 			is_default INTEGER NOT NULL DEFAULT 0,
 			uploaded_by TEXT
+		);`,
+		`CREATE TABLE IF NOT EXISTS rooms (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			host_id TEXT NOT NULL,
+			host_username TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			active_track_id TEXT,
+			voice_track_id TEXT,
+			background_id TEXT,
+			duration INTEGER NOT NULL,
+			started_at INTEGER NOT NULL DEFAULT 0,
+			password_hash BLOB,
+			updated_at INTEGER NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS room_members (
+			room_id TEXT NOT NULL,
+			username TEXT NOT NULL,
+			client_id TEXT NOT NULL,
+			joined_at INTEGER NOT NULL,
+			PRIMARY KEY (room_id, username, client_id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_room_members_lookup
+			ON room_members(room_id, username, client_id
 		);`,
 	}
 

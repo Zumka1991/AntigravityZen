@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +81,7 @@ type Room struct {
 	ID             string
 	Name           string
 	HostID         string
+	HostUsername   string
 	Clients        map[*Client]bool
 	Status         string // "lobby", "playing", "finished"
 	ActiveTrack    *Track
@@ -143,6 +145,7 @@ func (h *Hub) Run() {
 					ID:           client.RoomID,
 					Name:         name,
 					HostID:       client.ID,
+					HostUsername: client.Username,
 					Clients:      make(map[*Client]bool),
 					Status:       "lobby",
 					ActiveTrack:  track,
@@ -166,12 +169,21 @@ func (h *Hub) Run() {
 
 			room.Mutex.Lock()
 			room.Clients[client] = true
-			// If room exists but host disconnected previously, make this user host
-			if room.HostID == "" {
+			// The same authenticated account may reclaim host control after
+			// reopening a tab or reconnecting after a server restart.
+			if room.HostID == "" || (room.HostUsername != "" && strings.EqualFold(room.HostUsername, client.Username)) {
 				room.HostID = client.ID
+				room.HostUsername = client.Username
 			}
 			room.Mutex.Unlock()
 			h.Mutex.Unlock()
+
+			if err := PersistRoom(room); err != nil {
+				log.Printf("Could not persist room %s: %v", room.ID, err)
+			}
+			if err := SaveRoomMember(room.ID, client.Username, client.ID); err != nil {
+				log.Printf("Could not persist room membership for %s: %v", client.Username, err)
+			}
 
 			// Broadcast updated room state
 			h.BroadcastRoomState(client.RoomID)
@@ -187,31 +199,19 @@ func (h *Hub) Run() {
 					close(client.Send)
 					log.Printf("Client %s disconnected from room %s", client.Username, client.RoomID)
 
-					// If host disconnected, assign new host or delete room
+					// Keep the room and host identity. The client will normally
+					// reconnect within seconds after a deploy or network hiccup.
 					if room.HostID == client.ID {
 						h.stopVoiceRecordingLocked(room)
-						if len(room.Clients) > 0 {
-							// Choose any client as new host
-							for c := range room.Clients {
-								room.HostID = c.ID
-								log.Printf("Assigned new host %s to room %s", c.Username, room.ID)
-								break
-							}
-						} else {
-							// Delete room
-							delete(h.Rooms, client.RoomID)
-							delete(h.PendingPasswords, client.RoomID)
-							log.Printf("Deleted empty room %s", client.RoomID)
-							room.Mutex.Unlock()
-							h.Mutex.Unlock()
-							continue
-						}
 					}
 				}
 				room.Mutex.Unlock()
 			}
 			h.Mutex.Unlock()
 			if exists {
+				if err := PersistRoom(room); err != nil {
+					log.Printf("Could not persist disconnected room %s: %v", room.ID, err)
+				}
 				h.BroadcastRoomState(client.RoomID)
 			}
 		}

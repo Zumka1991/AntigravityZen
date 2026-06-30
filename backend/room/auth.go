@@ -8,7 +8,7 @@ import (
 	"errors"
 	"log"
 	"strings"
-	"sync"
+	"time"
 )
 
 // StoredUser представляет данные пользователя для сохранения в БД
@@ -20,17 +20,29 @@ type StoredUser struct {
 
 // AuthManager управляет сессиями и пользователями с помощью SQLite
 type AuthManager struct {
-	db       *sql.DB
-	sessions map[string]string // token -> username
-	mu       sync.RWMutex
+	db *sql.DB
 }
 
 // NewAuthManager создает новый менеджер авторизации с использованием БД
 func NewAuthManager(db *sql.DB) *AuthManager {
+	_, _ = db.Exec("DELETE FROM sessions WHERE expires_at <= ?", time.Now().Unix())
 	return &AuthManager{
-		db:       db,
-		sessions: make(map[string]string),
+		db: db,
 	}
+}
+
+const sessionLifetime = 30 * 24 * time.Hour
+
+func (am *AuthManager) createSession(username string) (string, error) {
+	token := generateToken()
+	expiresAt := time.Now().Add(sessionLifetime).Unix()
+	if _, err := am.db.Exec(
+		"INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)",
+		token, username, expiresAt,
+	); err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 // Register регистрирует нового пользователя и возвращает сессионный токен
@@ -64,12 +76,7 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 		return "", err
 	}
 
-	token := generateToken()
-	am.mu.Lock()
-	am.sessions[token] = username
-	am.mu.Unlock()
-
-	return token, nil
+	return am.createSession(username)
 }
 
 // Login аутентифицирует пользователя и возвращает сессионный токен
@@ -95,12 +102,7 @@ func (am *AuthManager) Login(username, password string) (string, error) {
 		return "", errors.New("invalid username or password")
 	}
 
-	token := generateToken()
-	am.mu.Lock()
-	am.sessions[token] = dbUsername
-	am.mu.Unlock()
-
-	return token, nil
+	return am.createSession(dbUsername)
 }
 
 // ValidateToken проверяет валидность токена и возвращает имя пользователя
@@ -108,11 +110,19 @@ func (am *AuthManager) ValidateToken(token string) (string, bool) {
 	if token == "" {
 		return "", false
 	}
-	am.mu.RLock()
-	defer am.mu.RUnlock()
-
-	username, exists := am.sessions[token]
-	return username, exists
+	var username string
+	var expiresAt int64
+	err := am.db.QueryRow(
+		"SELECT username, expires_at FROM sessions WHERE token = ?",
+		token,
+	).Scan(&username, &expiresAt)
+	if err != nil || expiresAt <= time.Now().Unix() {
+		if err == nil {
+			_, _ = am.db.Exec("DELETE FROM sessions WHERE token = ?", token)
+		}
+		return "", false
+	}
+	return username, true
 }
 
 // Logout удаляет активную сессию
@@ -120,9 +130,7 @@ func (am *AuthManager) Logout(token string) {
 	if token == "" {
 		return
 	}
-	am.mu.Lock()
-	defer am.mu.Unlock()
-	delete(am.sessions, token)
+	_, _ = am.db.Exec("DELETE FROM sessions WHERE token = ?", token)
 }
 
 // EnsureAdminCreated проверяет наличие пользователя admin и создает его с паролем по умолчанию, если его нет
