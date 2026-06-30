@@ -1421,10 +1421,18 @@ body:has(.in-room) {
 }
 
 html {
-  min-width: 320px;
+  min-width: 0;
   color-scheme: dark;
   background: var(--bg-canvas);
   scroll-behavior: smooth;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
@@ -2212,22 +2220,51 @@ label {
   }
 
   .main-header {
-    align-items: flex-start;
-    flex-direction: row;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.8rem;
     text-align: left;
   }
 
+  .main-header > .brand {
+    align-self: flex-start;
+  }
+
   .main-header > .header-actions {
-    width: auto;
-    justify-content: flex-end;
+    width: 100%;
   }
 
   .header-actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 0.5rem;
+    padding: 0.6rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .header-actions .language-switcher,
+  .header-actions > .btn-quiet {
+    width: 100%;
+  }
+
+  .header-actions .language-switcher {
+    justify-content: stretch;
+  }
+
+  .header-actions .language-option {
+    flex: 1;
+  }
+
+  .header-actions > .btn-quiet:last-of-type,
+  .header-actions > .user-badge {
+    grid-column: 1 / -1;
   }
 
   .header-actions .user-badge {
-    width: auto;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .welcome-panel {
@@ -2246,7 +2283,7 @@ label {
 
 @media (max-width: 540px) {
   .main-header {
-    align-items: center;
+    align-items: stretch;
   }
 
   .brand {
@@ -2256,14 +2293,6 @@ label {
   .brand-icon {
     width: 30px;
     height: 30px;
-  }
-
-  .header-actions .btn-quiet {
-    order: 3;
-  }
-
-  .header-actions > .user-badge {
-    order: 4;
   }
 
   .section-heading {

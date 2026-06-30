@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const emptyRoomGracePeriod = 2 * time.Minute
+
 func nullableTrackID(track *Track) any {
 	if track == nil {
 		return nil
@@ -92,6 +94,39 @@ func IsRoomMember(roomID, username, clientID string) bool {
 	return err == nil && exists
 }
 
+func DeleteRoomMember(roomID, username, clientID string) error {
+	if dbConn == nil {
+		return nil
+	}
+	_, err := dbConn.Exec(
+		"DELETE FROM room_members WHERE room_id = ? AND username = ? AND client_id = ?",
+		roomID, username, clientID,
+	)
+	return err
+}
+
+func DeletePersistentRoom(roomID string) error {
+	if dbConn == nil || roomID == "" {
+		return nil
+	}
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, query := range []string{
+		"DELETE FROM room_members WHERE room_id = ?",
+		"DELETE FROM chats WHERE room_id = ?",
+		"DELETE FROM rooms WHERE id = ?",
+	} {
+		if _, err := tx.Exec(query, roomID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (h *Hub) LoadPersistentRooms() error {
 	if dbConn == nil {
 		return nil
@@ -164,6 +199,8 @@ func (h *Hub) LoadPersistentRooms() error {
 			room.Background = FindBackground(backgroundID.String)
 		}
 		h.Rooms[id] = room
+		room.EmptySince = now
+		go h.scheduleEmptyRoomCleanup(id, now, emptyRoomGracePeriod)
 
 		if status == "playing" {
 			timers = append(timers, restoredTimer{id, startedAt, duration})
@@ -183,6 +220,86 @@ func (h *Hub) LoadPersistentRooms() error {
 	}
 	log.Printf("Restored %d rooms from SQLite", len(h.Rooms))
 	return nil
+}
+
+func (h *Hub) removeClientPermanently(client *Client) {
+	h.Mutex.Lock()
+	room, exists := h.Rooms[client.RoomID]
+	if !exists {
+		h.Mutex.Unlock()
+		return
+	}
+
+	room.Mutex.Lock()
+	if _, connected := room.Clients[client]; !connected {
+		room.Mutex.Unlock()
+		h.Mutex.Unlock()
+		return
+	}
+	delete(room.Clients, client)
+	close(client.Send)
+	if room.HostID == client.ID {
+		h.stopVoiceRecordingLocked(room)
+	}
+	isEmpty := len(room.Clients) == 0
+	room.Mutex.Unlock()
+
+	if isEmpty {
+		delete(h.Rooms, client.RoomID)
+		delete(h.PendingPasswords, client.RoomID)
+		for ticket, access := range h.AccessTickets {
+			if access.RoomID == client.RoomID {
+				delete(h.AccessTickets, ticket)
+			}
+		}
+	}
+	h.Mutex.Unlock()
+
+	if isEmpty {
+		if err := DeletePersistentRoom(client.RoomID); err != nil {
+			log.Printf("Could not delete empty room %s: %v", client.RoomID, err)
+		}
+		log.Printf("Deleted empty room %s after the last participant left", client.RoomID)
+		return
+	}
+	if err := DeleteRoomMember(client.RoomID, client.Username, client.ID); err != nil {
+		log.Printf("Could not delete room membership for %s: %v", client.Username, err)
+	}
+	h.BroadcastRoomState(client.RoomID)
+}
+
+func (h *Hub) scheduleEmptyRoomCleanup(roomID string, emptySince int64, delay time.Duration) {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	<-timer.C
+
+	h.Mutex.Lock()
+	room, exists := h.Rooms[roomID]
+	if !exists {
+		h.Mutex.Unlock()
+		return
+	}
+	room.Mutex.Lock()
+	stillEmpty := len(room.Clients) == 0 && room.EmptySince == emptySince
+	room.Mutex.Unlock()
+	if stillEmpty {
+		delete(h.Rooms, roomID)
+		delete(h.PendingPasswords, roomID)
+		for ticket, access := range h.AccessTickets {
+			if access.RoomID == roomID {
+				delete(h.AccessTickets, ticket)
+			}
+		}
+	}
+	h.Mutex.Unlock()
+
+	if stillEmpty {
+		if err := DeletePersistentRoom(roomID); err != nil {
+			log.Printf("Could not delete abandoned room %s: %v", roomID, err)
+			return
+		}
+		log.Printf("Deleted abandoned room %s after reconnect grace period", roomID)
+	}
 }
 
 func (h *Hub) scheduleRoomCompletion(roomID string, startedAt int64, duration int) {

@@ -180,6 +180,9 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 	}
 
 	switch msg.Type {
+	case "leave":
+		c.Hub.Leave <- c
+
 	case "chat":
 		type ChatPayload struct {
 			Text string `json:"text"`

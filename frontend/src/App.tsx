@@ -424,6 +424,9 @@ function App() {
   const handleLeaveRoom = () => {
     leavingRoomRef.current = true;
     if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'leave', payload: {} }));
+      }
       wsRef.current.close();
     }
     setActiveRoom(null);
@@ -478,6 +481,10 @@ function App() {
 
   const handleLogout = () => {
     leavingRoomRef.current = true;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'leave', payload: {} }));
+      wsRef.current.close();
+    }
     if (token) {
       void fetch(`${API_BASE}/logout`, {
         method: 'POST',

@@ -93,6 +93,7 @@ type Room struct {
 	VoiceFilePath  string
 	VoiceStartedAt int64 // Unix timestamp in ms
 	PasswordHash   []byte
+	EmptySince     int64
 	Mutex          sync.RWMutex
 }
 
@@ -101,6 +102,7 @@ type Hub struct {
 	Rooms            map[string]*Room
 	Register         chan *Client
 	Unregister       chan *Client
+	Leave            chan *Client
 	PendingPasswords map[string][]byte
 	AccessTickets    map[string]RoomAccessTicket
 	Mutex            sync.RWMutex
@@ -111,6 +113,7 @@ func NewHub() *Hub {
 		Rooms:            make(map[string]*Room),
 		Register:         make(chan *Client),
 		Unregister:       make(chan *Client),
+		Leave:            make(chan *Client),
 		PendingPasswords: make(map[string][]byte),
 		AccessTickets:    make(map[string]RoomAccessTicket),
 	}
@@ -169,6 +172,7 @@ func (h *Hub) Run() {
 
 			room.Mutex.Lock()
 			room.Clients[client] = true
+			room.EmptySince = 0
 			// The same authenticated account may reclaim host control after
 			// reopening a tab or reconnecting after a server restart.
 			if room.HostID == "" || (room.HostUsername != "" && strings.EqualFold(room.HostUsername, client.Username)) {
@@ -190,6 +194,7 @@ func (h *Hub) Run() {
 			h.SendChatHistory(client)
 
 		case client := <-h.Unregister:
+			var emptySince int64
 			h.Mutex.Lock()
 			room, exists := h.Rooms[client.RoomID]
 			if exists {
@@ -204,6 +209,10 @@ func (h *Hub) Run() {
 					if room.HostID == client.ID {
 						h.stopVoiceRecordingLocked(room)
 					}
+					if len(room.Clients) == 0 {
+						emptySince = time.Now().UnixMilli()
+						room.EmptySince = emptySince
+					}
 				}
 				room.Mutex.Unlock()
 			}
@@ -213,7 +222,13 @@ func (h *Hub) Run() {
 					log.Printf("Could not persist disconnected room %s: %v", room.ID, err)
 				}
 				h.BroadcastRoomState(client.RoomID)
+				if emptySince != 0 {
+					go h.scheduleEmptyRoomCleanup(client.RoomID, emptySince, emptyRoomGracePeriod)
+				}
 			}
+
+		case client := <-h.Leave:
+			h.removeClientPermanently(client)
 		}
 	}
 }
