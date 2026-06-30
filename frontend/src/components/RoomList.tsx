@@ -7,6 +7,7 @@ export interface Track {
   artist: string;
   audioUrl: string;
   duration: number;
+  ownerUsername?: string;
 }
 
 export interface RoomInfo {
@@ -38,7 +39,8 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [duration, setDuration] = useState(60);
-  const [selectedTrackId, setSelectedTrackId] = useState(tracks[0]?.id || '');
+  const ambientTracks = tracks.filter(t => !t.ownerUsername);
+  const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -146,8 +148,8 @@ export const RoomList: React.FC<RoomListProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t.activeRooms}</h2>
         <button className="btn btn-primary" onClick={() => {
-          if (tracks.length > 0 && !selectedTrackId) {
-            setSelectedTrackId(tracks[0].id);
+          if (ambientTracks.length > 0 && !selectedTrackId) {
+            setSelectedTrackId(ambientTracks[0].id);
           }
           setShowCreateModal(true);
         }}>
@@ -250,7 +252,7 @@ export const RoomList: React.FC<RoomListProps> = ({
               <div className="form-group">
                 <label>{t.selectSoundscape}</label>
                 <div className="track-selector">
-                  {tracks.map((track) => (
+                  {ambientTracks.map((track) => (
                     <div
                       key={track.id}
                       className={`track-option ${selectedTrackId === track.id ? 'selected' : ''}`}
