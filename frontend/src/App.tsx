@@ -30,10 +30,9 @@ function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Admin Panel States
+  // Shared sound library states
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [trackTitle, setTrackTitle] = useState('');
-  const [trackArtist, setTrackArtist] = useState('');
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -64,6 +63,7 @@ function App() {
   const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string } | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const sharedTracks = tracks.filter((track) => !track.ownerUsername || track.isPublic);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
   // WebSocket and real-time state
@@ -383,7 +383,7 @@ function App() {
     setActiveRoom(null);
   };
 
-  // Admin Operations
+  // Shared sound library operations
   const handleAddTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError(null);
@@ -403,7 +403,6 @@ function App() {
 
     const formData = new FormData();
     formData.append('title', trackTitle);
-    formData.append('artist', trackArtist);
     formData.append('duration', durationNum.toString());
     formData.append('file', trackFile);
 
@@ -424,7 +423,6 @@ function App() {
 
       fetchTracks();
       setTrackTitle('');
-      setTrackArtist('');
       setTrackFile(null);
       setTrackDuration('');
       
@@ -691,7 +689,7 @@ function App() {
               EN
             </button>
           </div>
-          {!activeRoom && token && username === 'admin' && (
+          {!activeRoom && token && (
             <button 
               className="btn" 
               onClick={() => setShowAdminPanel(true)}
@@ -822,9 +820,14 @@ function App() {
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
-                {t.adminPanelTitle}
-              </h2>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-heading)', marginBottom: '0.35rem' }}>
+                  {t.adminPanelTitle}
+                </h2>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                  {t.sharedLibraryDesc}
+                </p>
+              </div>
               <button 
                 className="btn btn-secondary" 
                 onClick={() => {
@@ -868,21 +871,6 @@ function App() {
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                  {t.trackArtistLabel}
-                </label>
-                <input
-                  type="text"
-                  placeholder={t.trackArtistPlaceholder}
-                  value={trackArtist}
-                  onChange={(e) => setTrackArtist(e.target.value)}
-                  required
-                  disabled={isUploading}
-                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
-                />
-              </div>
-
               <div className="span-2" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackFileLabel}
@@ -893,7 +881,20 @@ function App() {
                   accept="audio/mp3,audio/*"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setTrackFile(e.target.files[0]);
+                      const selectedFile = e.target.files[0];
+                      setTrackFile(selectedFile);
+
+                      const audio = document.createElement('audio');
+                      const objectUrl = URL.createObjectURL(selectedFile);
+                      audio.preload = 'metadata';
+                      audio.onloadedmetadata = () => {
+                        if (Number.isFinite(audio.duration)) {
+                          setTrackDuration(Math.ceil(audio.duration).toString());
+                        }
+                        URL.revokeObjectURL(objectUrl);
+                      };
+                      audio.onerror = () => URL.revokeObjectURL(objectUrl);
+                      audio.src = objectUrl;
                     }
                   }}
                   required
@@ -946,12 +947,12 @@ function App() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{t.backgroundSoundSetting}</h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                {tracks.length === 0 ? (
+                {sharedTracks.length === 0 ? (
                   <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', textAlign: 'center', padding: '1rem' }}>
                     {t.noTracksMsg}
                   </p>
                 ) : (
-                  tracks.map((track) => (
+                  sharedTracks.map((track) => (
                     <div key={track.id} style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -964,25 +965,28 @@ function App() {
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{(t as any)[track.id] || track.title}</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                          {track.artist} • {Math.floor(track.duration / 60)}m {track.duration % 60}s
+                          {track.ownerUsername ? `${t.uploadedBy}: ${track.ownerUsername} • ` : `${track.artist} • `}
+                          {Math.floor(track.duration / 60)}m {track.duration % 60}s
                         </div>
                       </div>
-                      <button 
-                        className="btn" 
-                        onClick={() => handleDeleteTrack(track.id)}
-                        style={{
-                          padding: '0.35rem 0.65rem',
-                          fontSize: '0.8rem',
-                          borderRadius: '8px',
-                          background: 'rgba(244, 63, 94, 0.1)',
-                          color: 'var(--color-accent)',
-                          border: '1px solid rgba(244, 63, 94, 0.2)',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {t.deleteTrackBtn}
-                      </button>
+                      {(username === 'admin' || track.ownerUsername?.toLowerCase() === username.toLowerCase()) && (
+                        <button
+                          className="btn"
+                          onClick={() => handleDeleteTrack(track.id)}
+                          style={{
+                            padding: '0.35rem 0.65rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '8px',
+                            background: 'rgba(244, 63, 94, 0.1)',
+                            color: 'var(--color-accent)',
+                            border: '1px solid rgba(244, 63, 94, 0.2)',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {t.deleteTrackBtn}
+                        </button>
+                      )}
                     </div>
                   ))
                 )}

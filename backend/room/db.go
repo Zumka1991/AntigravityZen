@@ -30,7 +30,9 @@ func InitDB(dbPath string) *sql.DB {
 			title TEXT NOT NULL,
 			artist TEXT NOT NULL,
 			audio_url TEXT NOT NULL,
-			duration INTEGER NOT NULL
+			duration INTEGER NOT NULL,
+			owner_username TEXT,
+			is_public INTEGER NOT NULL DEFAULT 0
 		);`,
 		`CREATE TABLE IF NOT EXISTS chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +58,16 @@ func InitDB(dbPath string) *sql.DB {
 			log.Printf("Error adding owner_username column to tracks table: %v", err)
 		} else {
 			log.Println("Added owner_username column to tracks table successfully")
+		}
+	}
+
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('tracks') WHERE name='is_public')").Scan(&colExists)
+	if err == nil && !colExists {
+		_, err = db.Exec("ALTER TABLE tracks ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0")
+		if err != nil {
+			log.Printf("Error adding is_public column to tracks table: %v", err)
+		} else {
+			log.Println("Added is_public column to tracks table successfully")
 		}
 	}
 

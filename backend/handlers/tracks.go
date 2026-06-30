@@ -14,8 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Helper to authenticate admin
-func validateAdmin(c *gin.Context, authManager *room.AuthManager) bool {
+const maxTrackUploadSize = 100 << 20
+
+// authenticateTrackUser validates a session and returns its username.
+func authenticateTrackUser(c *gin.Context, authManager *room.AuthManager) (string, bool) {
 	token := c.GetHeader("Authorization")
 	if token == "" {
 		token = c.Query("token")
@@ -24,11 +26,11 @@ func validateAdmin(c *gin.Context, authManager *room.AuthManager) bool {
 	}
 
 	username, valid := authManager.ValidateToken(token)
-	if !valid || username != "admin" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized. Admin privileges required."})
-		return false
+	if !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return "", false
 	}
-	return true
+	return username, true
 }
 
 // GetTracksHandler handles GET /api/tracks
@@ -50,15 +52,18 @@ func GetTracksHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // AddTrackHandler handles POST /api/tracks
 func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !validateAdmin(c, authManager) {
+		username, valid := authenticateTrackUser(c, authManager)
+		if !valid {
 			return
 		}
 
-		// Parse multipart form (Gin automatically parses it up to 32MB by default, but we can set max memory if needed)
-		// We can get form values directly
-		title := c.PostForm("title")
-		artist := c.PostForm("artist")
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTrackUploadSize)
+		title := strings.TrimSpace(c.PostForm("title"))
 		durationStr := c.PostForm("duration")
+		if title == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
+			return
+		}
 
 		durationNum, err := strconv.Atoi(durationStr)
 		if err != nil || durationNum <= 0 {
@@ -69,6 +74,25 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		file, err := c.FormFile("file")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing file parameter"})
+			return
+		}
+		if file.Size > maxTrackUploadSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Audio file must be smaller than 100 MB"})
+			return
+		}
+
+		allowedExtensions := map[string]bool{
+			".mp3":  true,
+			".wav":  true,
+			".ogg":  true,
+			".m4a":  true,
+			".aac":  true,
+			".flac": true,
+			".webm": true,
+		}
+		extension := strings.ToLower(filepath.Ext(file.Filename))
+		if !allowedExtensions[extension] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported audio file format"})
 			return
 		}
 
@@ -84,7 +108,7 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		}
 
 		audioURL := fmt.Sprintf("/uploads/%s", uniqueFilename)
-		newTrack, err := room.AddTrack(title, artist, audioURL, durationNum, "")
+		newTrack, err := room.AddTrack(title, username, audioURL, durationNum, username, true)
 		if err != nil {
 			os.Remove(uploadPath) // Clean up file on failure
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -98,7 +122,8 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // DeleteTrackHandler handles DELETE /api/tracks
 func DeleteTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !validateAdmin(c, authManager) {
+		username, valid := authenticateTrackUser(c, authManager)
+		if !valid {
 			return
 		}
 
@@ -110,13 +135,20 @@ func DeleteTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 
 		// Find track first to delete its file from uploads folder
 		track := room.FindTrack(trackID)
+		if track == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Track not found"})
+			return
+		}
+		if username != "admin" && !strings.EqualFold(track.OwnerUsername, username) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You can only delete tracks that you uploaded"})
+			return
+		}
+
 		var fileToDelete string
-		if track != nil {
-			if strings.Contains(track.AudioURL, "/uploads/") {
-				parts := strings.Split(track.AudioURL, "/uploads/")
-				if len(parts) > 1 {
-					fileToDelete = filepath.Join("./uploads", parts[1])
-				}
+		if strings.Contains(track.AudioURL, "/uploads/") {
+			parts := strings.Split(track.AudioURL, "/uploads/")
+			if len(parts) > 1 {
+				fileToDelete = filepath.Join("./uploads", filepath.Base(parts[1]))
 			}
 		}
 

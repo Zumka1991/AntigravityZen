@@ -8,6 +8,7 @@ export interface Track {
   audioUrl: string;
   duration: number;
   ownerUsername?: string;
+  isPublic: boolean;
 }
 
 export interface RoomInfo {
@@ -39,8 +40,8 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [duration, setDuration] = useState(60);
-  const ambientTracks = tracks.filter(t => !t.ownerUsername);
-  const recordedTracks = tracks.filter(t => !!t.ownerUsername);
+  const ambientTracks = tracks.filter(t => !t.ownerUsername || t.isPublic);
+  const recordedTracks = tracks.filter(t => !!t.ownerUsername && !t.isPublic);
   const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
   const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('none');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);

@@ -387,8 +387,8 @@ func InitTracks() {
 
 func FindTrack(id string) *Track {
 	var t Track
-	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, '') FROM tracks WHERE id = ?", id).
-		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername)
+	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0) FROM tracks WHERE id = ?", id).
+		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -400,7 +400,7 @@ func FindTrack(id string) *Track {
 }
 
 func GetTracks() []Track {
-	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, '') FROM tracks")
+	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0) FROM tracks")
 	if err != nil {
 		log.Printf("Error getting tracks: %v", err)
 		return []Track{}
@@ -410,7 +410,7 @@ func GetTracks() []Track {
 	var tracks []Track
 	for rows.Next() {
 		var t Track
-		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername); err == nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic); err == nil {
 			tracks = append(tracks, t)
 		}
 	}
@@ -418,7 +418,12 @@ func GetTracks() []Track {
 }
 
 func GetTracksForUser(username string) []Track {
-	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, '') FROM tracks WHERE owner_username IS NULL OR owner_username = '' OR owner_username = ?", username)
+	rows, err := dbConn.Query(`
+		SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0)
+		FROM tracks
+		WHERE owner_username IS NULL OR owner_username = '' OR is_public = 1 OR owner_username = ?
+		ORDER BY title COLLATE NOCASE
+	`, username)
 	if err != nil {
 		log.Printf("Error getting tracks for user %s: %v", username, err)
 		return []Track{}
@@ -428,7 +433,7 @@ func GetTracksForUser(username string) []Track {
 	var tracks []Track
 	for rows.Next() {
 		var t Track
-		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername); err == nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic); err == nil {
 			tracks = append(tracks, t)
 		}
 	}
@@ -436,7 +441,7 @@ func GetTracksForUser(username string) []Track {
 }
 
 // AddTrack добавляет новый трек в БД
-func AddTrack(title, artist, audioURL string, duration int, ownerUsername string) (Track, error) {
+func AddTrack(title, artist, audioURL string, duration int, ownerUsername string, isPublic bool) (Track, error) {
 	title = strings.TrimSpace(title)
 	artist = strings.TrimSpace(artist)
 	audioURL = strings.TrimSpace(audioURL)
@@ -482,10 +487,11 @@ func AddTrack(title, artist, audioURL string, duration int, ownerUsername string
 		AudioURL:      audioURL,
 		Duration:      duration,
 		OwnerUsername: ownerUsername,
+		IsPublic:      isPublic,
 	}
 
-	_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, owner_username) VALUES (?, ?, ?, ?, ?, ?)",
-		newTrack.ID, newTrack.Title, newTrack.Artist, newTrack.AudioURL, newTrack.Duration, newTrack.OwnerUsername)
+	_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, owner_username, is_public) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		newTrack.ID, newTrack.Title, newTrack.Artist, newTrack.AudioURL, newTrack.Duration, newTrack.OwnerUsername, newTrack.IsPublic)
 	if err != nil {
 		return Track{}, err
 	}

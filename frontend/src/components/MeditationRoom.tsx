@@ -467,8 +467,8 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const isPlaying = roomState.status === 'playing';
 
   // Configurable states for host before starting
-  const ambientTracks = tracks.filter(tr => !tr.ownerUsername);
-  const recordedTracks = tracks.filter(tr => !!tr.ownerUsername);
+  const ambientTracks = tracks.filter(tr => !tr.ownerUsername || tr.isPublic);
+  const recordedTracks = tracks.filter(tr => !!tr.ownerUsername && !tr.isPublic);
 
   const [selectedTrackId, setSelectedTrackId] = useState(roomState.activeTrack?.id || ambientTracks[0]?.id || '');
   const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('live');

@@ -28,6 +28,7 @@ type Track struct {
 	AudioURL      string `json:"audioUrl"`
 	Duration      int    `json:"duration"` // in seconds
 	OwnerUsername string `json:"ownerUsername,omitempty"`
+	IsPublic      bool   `json:"isPublic"`
 }
 
 // Message sent over websocket
@@ -40,16 +41,16 @@ type Message struct {
 
 // RoomState payload sent to clients
 type RoomState struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	HostID        string    `json:"hostId"`
-	Clients       []User    `json:"clients"`
-	Status        string    `json:"status"` // "lobby", "playing", "finished"
-	ActiveTrack   *Track    `json:"activeTrack,omitempty"`
-	VoiceTrack    *Track    `json:"voiceTrack,omitempty"`
-	Duration      int       `json:"duration,omitempty"` // selected duration in seconds
-	StartedAt     int64     `json:"startedAt,omitempty"` // Unix timestamp in ms
-	ServerTime    int64     `json:"serverTime"` // current server Unix timestamp in ms
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	HostID      string `json:"hostId"`
+	Clients     []User `json:"clients"`
+	Status      string `json:"status"` // "lobby", "playing", "finished"
+	ActiveTrack *Track `json:"activeTrack,omitempty"`
+	VoiceTrack  *Track `json:"voiceTrack,omitempty"`
+	Duration    int    `json:"duration,omitempty"`  // selected duration in seconds
+	StartedAt   int64  `json:"startedAt,omitempty"` // Unix timestamp in ms
+	ServerTime  int64  `json:"serverTime"`          // current server Unix timestamp in ms
 }
 
 type User struct {
@@ -60,16 +61,16 @@ type User struct {
 
 // Client represents a connected websocket client
 type Client struct {
-	Hub                  *Hub
-	Conn                 *websocket.Conn
-	Send                 chan []byte
-	RoomID               string
-	RoomName             string
-	ID                   string
-	Username             string
-	InitialDuration      int
-	InitialTrackID       string
-	InitialVoiceTrackID  string
+	Hub                 *Hub
+	Conn                *websocket.Conn
+	Send                chan []byte
+	RoomID              string
+	RoomName            string
+	ID                  string
+	Username            string
+	InitialDuration     int
+	InitialTrackID      string
+	InitialVoiceTrackID string
 }
 
 // Room represents a single meditation session room
@@ -81,8 +82,8 @@ type Room struct {
 	Status         string // "lobby", "playing", "finished"
 	ActiveTrack    *Track
 	VoiceTrack     *Track // pre-recorded voice accompaniment
-	Duration       int // in seconds
-	StartedAt      int64 // timestamp in ms
+	Duration       int    // in seconds
+	StartedAt      int64  // timestamp in ms
 	VoiceFile      *os.File
 	VoiceFilePath  string
 	VoiceStartedAt int64 // Unix timestamp in ms
@@ -450,7 +451,7 @@ func (h *Hub) stopVoiceRecordingLocked(room *Room) {
 		}
 		go func() {
 			title := fmt.Sprintf("Guided Session - %s", roomName)
-			_, err := AddTrack(title, hostUsername, filePath, durationSec, hostUsername)
+			_, err := AddTrack(title, hostUsername, filePath, durationSec, hostUsername, false)
 			if err != nil {
 				log.Printf("Error registering recorded track: %v", err)
 			} else {
