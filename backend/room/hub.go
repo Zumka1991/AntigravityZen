@@ -426,15 +426,18 @@ func (h *Hub) stopVoiceRecordingLocked(room *Room) {
 	_ = room.VoiceFile.Close()
 	room.VoiceFile = nil
 
-	durationMs := (time.Now().UnixNano() / int64(time.Millisecond)) - room.VoiceStartedAt
-	durationSec := int(durationMs / 1000)
+	// Compute duration from VoiceStartedAt (always set when recording is active)
+	var durationSec int
+	if room.VoiceStartedAt > 0 {
+		durationMs := (time.Now().UnixNano() / int64(time.Millisecond)) - room.VoiceStartedAt
+		durationSec = int(durationMs / 1000)
+	}
 
 	log.Printf("Voice streaming stopped in room %s. Recorded duration: %ds", room.ID, durationSec)
 
 	filePath := room.VoiceFilePath
 	roomName := room.Name
 	hostID := room.HostID
-	roomID := room.ID
 
 	// Register track in DB asynchronously to keep websocket thread responsive
 	if durationSec > 2 {
@@ -465,5 +468,6 @@ func (h *Hub) stopVoiceRecordingLocked(room *Room) {
 	room.VoiceStartedAt = 0
 
 	// Broadcast voice_stop asynchronously
+	roomID := room.ID
 	go h.BroadcastVoiceEvent(roomID, "voice_stop", "")
 }

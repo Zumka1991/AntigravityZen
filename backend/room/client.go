@@ -276,20 +276,15 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			room.Mutex.Unlock()
 			return
 		}
-		hasVoice := room.VoiceFilePath != ""
+		// Stop voice recording first (before clearing VoiceStartedAt so duration is correct)
+		c.Hub.stopVoiceRecordingLocked(room)
 		room.Status = "lobby"
 		room.ActiveTrack = nil
 		room.StartedAt = 0
-		room.VoiceFilePath = ""
-		room.VoiceStartedAt = 0
 		room.Mutex.Unlock()
 
 		log.Printf("Meditation stopped in room %s", room.ID)
 		c.Hub.BroadcastRoomState(c.RoomID)
-
-		if hasVoice {
-			c.Hub.BroadcastVoiceEvent(c.RoomID, "voice_stop", "")
-		}
 
 	case "voice_start":
 		room.Mutex.Lock()
