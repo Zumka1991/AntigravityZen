@@ -16,12 +16,13 @@ interface MeditationRoomProps {
   tracks: Track[];
   messages: Message[];
   onSendMessage: (text: string) => void;
-  onStartMeditation: (trackId: string, duration: number) => void;
+  onStartMeditation: (trackId: string, duration: number, voiceTrackId?: string) => void;
   onStopMeditation: () => void;
   onLeaveRoom: () => void;
   t: typeof translations.en;
   voiceNarrator: string | null;
   voiceFileUrl: string | null;
+  isVoiceStatic?: boolean;
   registerVoiceListener: (listener: (chunk: ArrayBuffer) => void) => () => void;
   onVoiceStart: () => void;
   onVoiceStop: () => void;
@@ -41,6 +42,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   t,
   voiceNarrator,
   voiceFileUrl,
+  isVoiceStatic = false,
   registerVoiceListener,
   onVoiceStart,
   onVoiceStop,
@@ -343,13 +345,27 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   // Voice stream playback logic (Participants)
   useEffect(() => {
     if (voiceNarrator && !isMicrophoneActive) {
-      const useMSE = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/webm; codecs=opus');
-      console.log(`[Voice] Starting playback stream. Mode: ${useMSE ? 'MSE (Low Latency)' : 'Progressive Fallback'}`);
-      
       const audio = new Audio();
       audio.volume = voiceVolume;
       voiceAudioRef.current = audio;
 
+      if (isVoiceStatic) {
+        console.log("[Voice] Static pre-recorded playback playing file:", voiceFileUrl);
+        if (voiceFileUrl) {
+          audio.src = voiceFileUrl;
+          audio.play().catch(e => console.warn("[Voice] Pre-recorded play failed:", e));
+        }
+        return () => {
+          audio.pause();
+          audio.src = '';
+          voiceAudioRef.current = null;
+          console.log("[Voice] Pre-recorded playback stream stopped.");
+        };
+      }
+
+      const useMSE = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/webm; codecs=opus');
+      console.log(`[Voice] Starting playback stream. Mode: ${useMSE ? 'MSE (Low Latency)' : 'Progressive Fallback'}`);
+      
       let unsubscribe = () => {};
 
       if (useMSE) {
@@ -445,7 +461,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         }
       }
     }
-  }, [voiceNarrator, voiceFileUrl, registerVoiceListener, username, voiceVolume, isMicrophoneActive]);
+  }, [voiceNarrator, voiceFileUrl, registerVoiceListener, username, voiceVolume, isMicrophoneActive, isVoiceStatic]);
 
   const isHost = roomState.hostId === clientId;
   const isPlaying = roomState.status === 'playing';
@@ -454,24 +470,9 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const ambientTracks = tracks.filter(tr => !tr.ownerUsername);
   const recordedTracks = tracks.filter(tr => !!tr.ownerUsername);
 
-  const [trackType, setTrackType] = useState<'ambient' | 'recorded'>('ambient');
-  const [selectedTrackId, setSelectedTrackId] = useState(roomState.activeTrack?.id || tracks[0]?.id || '');
+  const [selectedTrackId, setSelectedTrackId] = useState(roomState.activeTrack?.id || ambientTracks[0]?.id || '');
+  const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('live');
   const [selectedDuration, setSelectedDuration] = useState(roomState.duration || 60);
-
-  const handleTrackTypeChange = (type: 'ambient' | 'recorded') => {
-    setTrackType(type);
-    if (type === 'ambient') {
-      if (ambientTracks.length > 0) {
-        setSelectedTrackId(ambientTracks[0].id);
-      }
-    } else {
-      if (recordedTracks.length > 0) {
-        setSelectedTrackId(recordedTracks[0].id);
-      } else {
-        setSelectedTrackId('');
-      }
-    }
-  };
 
   const standardDurations = [30, 60, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200];
   const durationOptions = [...standardDurations];
@@ -965,95 +966,36 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                       </div>
                     </div>
 
+                    {/* Dropdown 1: Background Music */}
                     <div className="form-group" style={{ width: '100%' }}>
                       <label>{t.backgroundSoundSetting}</label>
-                      
-                      {/* Segmented Switcher */}
-                      <div style={{ 
-                        display: 'flex', 
-                        background: 'rgba(255, 255, 255, 0.03)', 
-                        border: '1px solid rgba(255, 255, 255, 0.05)', 
-                        borderRadius: '10px', 
-                        padding: '3px', 
-                        marginBottom: '0.75rem' 
-                      }}>
-                        <button 
-                          type="button"
-                          onClick={() => handleTrackTypeChange('ambient')}
-                          style={{
-                            flex: 1,
-                            padding: '0.45rem',
-                            border: 'none',
-                            borderRadius: '8px',
-                            background: trackType === 'ambient' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                            color: trackType === 'ambient' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          🎵 {t.ambientSoundsTab}
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleTrackTypeChange('recorded')}
-                          style={{
-                            flex: 1,
-                            padding: '0.45rem',
-                            border: 'none',
-                            borderRadius: '8px',
-                            background: trackType === 'recorded' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                            color: trackType === 'recorded' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          🎙️ {t.myRecordingsTab}
-                        </button>
-                      </div>
+                      <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
+                        {ambientTracks.map(tOption => (
+                          <option key={tOption.id} value={tOption.id}>
+                            {(t as any)[tOption.id] || tOption.title} ({Math.floor(tOption.duration/60)}m)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                      {/* Dropdown or Message */}
-                      {trackType === 'ambient' ? (
-                        <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
-                          {ambientTracks.map(tOption => (
-                            <option key={tOption.id} value={tOption.id}>
-                              {(t as any)[tOption.id] || tOption.title} ({Math.floor(tOption.duration/60)}m)
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        recordedTracks.length > 0 ? (
-                          <select value={selectedTrackId} onChange={(e) => setSelectedTrackId(e.target.value)}>
-                            {recordedTracks.map(tOption => (
-                              <option key={tOption.id} value={tOption.id}>
-                                {tOption.title} ({Math.floor(tOption.duration/60)}m {tOption.duration % 60}s)
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div style={{ 
-                            padding: '0.85rem', 
-                            background: 'rgba(255, 255, 255, 0.01)', 
-                            border: '1px dashed rgba(255, 255, 255, 0.1)', 
-                            borderRadius: '8px',
-                            fontSize: '0.8rem',
-                            color: 'var(--color-text-secondary)',
-                            textAlign: 'center',
-                            lineHeight: '1.4'
-                          }}>
-                            {t.noRecordingsMsg}
-                          </div>
-                        )
-                      )}
+                    {/* Dropdown 2: Voice Accompaniment */}
+                    <div className="form-group" style={{ width: '100%' }}>
+                      <label>🎙️ {t.voiceVolumeLabel}</label>
+                      <select value={selectedVoiceTrackId} onChange={(e) => setSelectedVoiceTrackId(e.target.value)}>
+                        <option value="live">🎙️ {t.ambientSoundsTab === 'Фоновые звуки' ? 'Живой эфир (микрофон)' : 'Live Mic Stream'}</option>
+                        <option value="none">🔇 {t.ambientSoundsTab === 'Фоновые звуки' ? 'Без голоса (только музыка)' : 'No Voice (Music Only)'}</option>
+                        {recordedTracks.map(tOption => (
+                          <option key={tOption.id} value={tOption.id}>
+                            💾 {tOption.title} ({Math.floor(tOption.duration/60)}m {tOption.duration % 60}s)
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <button 
                       className="btn btn-secondary" 
                       onClick={() => setShowSettings(false)}
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderRadius: '10px', alignSelf: 'center' }}
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderRadius: '10px', alignSelf: 'center', marginTop: '0.5rem' }}
                     >
                       {t.collapseSettings}
                     </button>
@@ -1074,6 +1016,16 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                           {getTrackTitle(tracks.find(tr => tr.id === selectedTrackId))}
                         </span>
                       </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.95rem' }}>
+                        <span>🎙️</span>
+                        <span style={{ color: 'var(--color-text-primary)' }}>
+                          {selectedVoiceTrackId === 'live' 
+                            ? (t.ambientSoundsTab === 'Фоновые звуки' ? 'Живой эфир (микрофон)' : 'Live Mic Stream')
+                            : selectedVoiceTrackId === 'none'
+                            ? (t.ambientSoundsTab === 'Фоновые звуки' ? 'Без голоса (только музыка)' : 'No Voice (Music Only)')
+                            : tracks.find(tr => tr.id === selectedVoiceTrackId)?.title}
+                        </span>
+                      </div>
                     </div>
                     <button 
                       className="btn btn-secondary" 
@@ -1087,7 +1039,10 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
                 <button 
                   className="btn btn-primary" 
-                  onClick={() => onStartMeditation(selectedTrackId, selectedDuration)}
+                  onClick={() => {
+                    const voiceTrackParam = (selectedVoiceTrackId === 'live' || selectedVoiceTrackId === 'none') ? undefined : selectedVoiceTrackId;
+                    onStartMeditation(selectedTrackId, selectedDuration, voiceTrackParam);
+                  }}
                   style={{ width: '100%', marginTop: '0.5rem', padding: '0.9rem', borderRadius: '12px' }}
                 >
                   {t.startSessionBtn}

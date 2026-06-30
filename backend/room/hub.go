@@ -375,9 +375,14 @@ func (h *Hub) BroadcastVoiceEvent(roomID string, eventType string, username stri
 	var payloadBytes []byte
 	if eventType == "voice_start" && room.VoiceFilePath != "" {
 		type VoiceStartPayload struct {
-			FileUrl string `json:"file_url"`
+			FileUrl  string `json:"file_url"`
+			IsStatic bool   `json:"is_static"`
 		}
-		payloadBytes, _ = json.Marshal(VoiceStartPayload{FileUrl: room.VoiceFilePath})
+		isStatic := room.VoiceFile == nil
+		payloadBytes, _ = json.Marshal(VoiceStartPayload{
+			FileUrl:  room.VoiceFilePath,
+			IsStatic: isStatic,
+		})
 	}
 	room.Mutex.RUnlock()
 

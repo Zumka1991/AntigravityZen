@@ -203,8 +203,9 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 		}
 
 		type StartPayload struct {
-			TrackID  string `json:"trackId"`
-			Duration int    `json:"duration"` // duration in seconds
+			TrackID      string `json:"trackId"`
+			Duration     int    `json:"duration"` // duration in seconds
+			VoiceTrackID string `json:"voiceTrackId"`
 		}
 		var payload StartPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
@@ -214,7 +215,6 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 		}
 
 		// Find track details
-		// We will hardcode some tracks in the server or in the room package.
 		track := FindTrack(payload.TrackID)
 		if track == nil {
 			room.Mutex.Unlock()
@@ -226,10 +226,28 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 		room.ActiveTrack = track
 		room.Duration = payload.Duration
 		room.StartedAt = time.Now().UnixNano() / int64(time.Millisecond)
+
+		// Check if a pre-recorded voice track was selected
+		var voiceTrack *Track
+		if payload.VoiceTrackID != "" {
+			voiceTrack = FindTrack(payload.VoiceTrackID)
+			if voiceTrack != nil {
+				room.VoiceFilePath = voiceTrack.AudioURL
+				room.VoiceStartedAt = room.StartedAt
+			}
+		} else {
+			room.VoiceFilePath = ""
+			room.VoiceStartedAt = 0
+		}
 		room.Mutex.Unlock()
 
 		log.Printf("Meditation started in room %s. Track: %s, Duration: %ds", room.ID, track.Title, payload.Duration)
 		c.Hub.BroadcastRoomState(c.RoomID)
+
+		// If pre-recorded voice is selected, broadcast voice_start instantly!
+		if voiceTrack != nil {
+			c.Hub.BroadcastVoiceEvent(c.RoomID, "voice_start", c.Username)
+		}
 
 		// Start a timer to end the meditation when it completes
 		go func(r *Room, duration int, startMs int64) {
@@ -237,10 +255,16 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			r.Mutex.Lock()
 			// Check if this specific meditation is still active
 			if r.Status == "playing" && r.StartedAt == startMs {
+				hasVoice := r.VoiceFilePath != ""
 				r.Status = "finished"
+				r.VoiceFilePath = ""
+				r.VoiceStartedAt = 0
 				r.Mutex.Unlock()
 				c.Hub.BroadcastRoomState(r.ID)
 				log.Printf("Meditation naturally completed in room %s", r.ID)
+				if hasVoice {
+					c.Hub.BroadcastVoiceEvent(r.ID, "voice_stop", "")
+				}
 			} else {
 				r.Mutex.Unlock()
 			}
@@ -252,13 +276,20 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			room.Mutex.Unlock()
 			return
 		}
+		hasVoice := room.VoiceFilePath != ""
 		room.Status = "lobby"
 		room.ActiveTrack = nil
 		room.StartedAt = 0
+		room.VoiceFilePath = ""
+		room.VoiceStartedAt = 0
 		room.Mutex.Unlock()
 
 		log.Printf("Meditation stopped in room %s", room.ID)
 		c.Hub.BroadcastRoomState(c.RoomID)
+
+		if hasVoice {
+			c.Hub.BroadcastVoiceEvent(c.RoomID, "voice_stop", "")
+		}
 
 	case "voice_start":
 		room.Mutex.Lock()

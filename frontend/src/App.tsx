@@ -72,6 +72,7 @@ function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const [voiceNarrator, setVoiceNarrator] = useState<string | null>(null);
   const [voiceFileUrl, setVoiceFileUrl] = useState<string | null>(null);
+  const [isVoiceStatic, setIsVoiceStatic] = useState(false);
   const voiceListenersRef = useRef<((chunk: ArrayBuffer) => void)[]>([]);
 
   const registerVoiceListener = (listener: (chunk: ArrayBuffer) => void) => {
@@ -230,12 +231,15 @@ function App() {
                 break;
               case 'voice_start':
                 const fileUrl = data.payload && data.payload.file_url ? data.payload.file_url : null;
+                const isStatic = data.payload && !!data.payload.is_static;
                 setVoiceFileUrl(fileUrl);
+                setIsVoiceStatic(isStatic);
                 setVoiceNarrator(data.username);
                 break;
               case 'voice_stop':
                 setVoiceNarrator(null);
                 setVoiceFileUrl(null);
+                setIsVoiceStatic(false);
                 break;
               case 'voice_data':
                 if (data.payload && data.payload.data) {
@@ -465,11 +469,11 @@ function App() {
     }
   };
 
-  const handleStartMeditation = (trackId: string, duration: number) => {
+  const handleStartMeditation = (trackId: string, duration: number, voiceTrackId?: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const msg = {
         type: 'start',
-        payload: { trackId, duration },
+        payload: { trackId, duration, voiceTrackId },
       };
       wsRef.current.send(JSON.stringify(msg));
     }
@@ -734,6 +738,7 @@ function App() {
               t={t}
               voiceNarrator={voiceNarrator}
               voiceFileUrl={voiceFileUrl}
+              isVoiceStatic={isVoiceStatic}
               registerVoiceListener={registerVoiceListener}
               onVoiceStart={handleVoiceStart}
               onVoiceStop={handleVoiceStop}
