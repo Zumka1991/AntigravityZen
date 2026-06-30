@@ -324,60 +324,87 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 	}
 }
 
-// InitTracks инициализирует список дефолтных треков в БД, если таблица пуста
+// InitTracks инициализирует список дефолтных треков в БД, если они отсутствуют
 func InitTracks() {
-	var count int
-	err := dbConn.QueryRow("SELECT COUNT(*) FROM tracks").Scan(&count)
-	if err != nil {
-		log.Printf("Error counting tracks in DB: %v", err)
-		return
-	}
-
-	if count > 0 {
-		log.Printf("Loaded tracks from SQLite database")
-		return
-	}
-
-	// Дефолтные треки, если база пуста
 	defaultTracks := []Track{
 		{
 			ID:       "ambient-rain",
 			Title:    "Gentle Rain & Thunder",
 			Artist:   "Nature Sounds",
-			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-			Duration: 372,
+			AudioURL: "/uploads/ambient_rain.wav",
+			Duration: 90,
 		},
 		{
 			ID:       "tibetan-bowls",
 			Title:    "Tibetan Singing Bowls Meditation",
 			Artist:   "Spirituality",
-			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-			Duration: 423,
+			AudioURL: "/uploads/tibetan_bowls.wav",
+			Duration: 90,
 		},
 		{
 			ID:       "deep-relaxation",
 			Title:    "Deep Sleep & Astral Relaxation",
 			Artist:   "Solitude Music",
-			AudioURL: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-			Duration: 302,
+			AudioURL: "/uploads/deep_relaxation.wav",
+			Duration: 90,
+		},
+		{
+			ID:       "ocean-waves",
+			Title:    "Ocean Waves & Breeze",
+			Artist:   "Nature Sounds",
+			AudioURL: "/uploads/ocean_waves.wav",
+			Duration: 90,
+		},
+		{
+			ID:       "cosmic-drone",
+			Title:    "Deep Cosmic Drone",
+			Artist:   "Zen Ambient",
+			AudioURL: "/uploads/cosmic_drone.wav",
+			Duration: 90,
+		},
+		{
+			ID:       "binaural-beats",
+			Title:    "Binaural Beats (Theta)",
+			Artist:   "Neuroscience",
+			AudioURL: "/uploads/binaural_beats.wav",
+			Duration: 90,
+		},
+		{
+			ID:       "forest-night",
+			Title:    "Forest Night & Campfire",
+			Artist:   "Nature Sounds",
+			AudioURL: "/uploads/forest_night.wav",
+			Duration: 90,
 		},
 	}
 
-	tx, err := dbConn.Begin()
-	if err != nil {
-		log.Printf("Error starting transaction: %v", err)
-		return
-	}
-
 	for _, t := range defaultTracks {
-		_, err := tx.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration) VALUES (?, ?, ?, ?, ?)",
-			t.ID, t.Title, t.Artist, t.AudioURL, t.Duration)
-		if err != nil {
-			log.Printf("Error inserting default track %s: %v", t.Title, err)
+		var currentURL string
+		err := dbConn.QueryRow("SELECT audio_url FROM tracks WHERE id = ?", t.ID).Scan(&currentURL)
+		if err == sql.ErrNoRows {
+			// Insert new track
+			_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, is_public) VALUES (?, ?, ?, ?, ?, 1)",
+				t.ID, t.Title, t.Artist, t.AudioURL, t.Duration)
+			if err != nil {
+				log.Printf("Error inserting default track %s: %v", t.Title, err)
+			} else {
+				log.Printf("Inserted default track: %s", t.Title)
+			}
+		} else if err == nil {
+			// If it's the old soundhelix placeholder, update it to the new local file
+			if strings.Contains(currentURL, "soundhelix.com") {
+				_, err := dbConn.Exec("UPDATE tracks SET title = ?, artist = ?, audio_url = ?, duration = ?, is_public = 1 WHERE id = ?",
+					t.Title, t.Artist, t.AudioURL, t.Duration, t.ID)
+				if err != nil {
+					log.Printf("Error updating default track %s: %v", t.Title, err)
+				} else {
+					log.Printf("Updated default track %s to local file", t.Title)
+				}
+			}
+		} else {
+			log.Printf("Error checking track %s in DB: %v", t.ID, err)
 		}
 	}
-
-	_ = tx.Commit()
 	log.Println("Initialized default tracks in SQLite database")
 }
 
