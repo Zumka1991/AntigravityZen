@@ -628,8 +628,8 @@ input[type="range"]:focus {
 /* The Breathing Ring Outer Glow */
 .visualizer-container {
   position: relative;
-  width: 280px;
-  height: 280px;
+  width: 220px;
+  height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -647,8 +647,8 @@ input[type="range"]:focus {
 }
 
 .breathing-core {
-  width: 120px;
-  height: 120px;
+  width: 92px;
+  height: 92px;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   border-radius: 50%;
   display: flex;
@@ -656,13 +656,13 @@ input[type="range"]:focus {
   justify-content: center;
   position: relative;
   z-index: 5;
-  box-shadow: 0 0 50px rgba(167, 139, 250, 0.4);
+  box-shadow: 0 0 40px rgba(167, 139, 250, 0.4);
   transition: transform 0.1s linear;
 }
 
 .timer-display {
   font-family: var(--font-heading);
-  font-size: 1.75rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: #06050e;
   text-shadow: 0 2px 4px rgba(255, 255, 255, 0.3);

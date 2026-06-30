@@ -531,7 +531,7 @@ function App() {
         <header className="app-header" style={{ borderBottom: 'none', marginBottom: '1.5rem', width: '100%', maxWidth: '400px', justifyContent: 'center' }}>
           <div className="brand">
             <div className="brand-icon" />
-            <span>Antigravity Zen</span>
+            <span>ZenWorld</span>
           </div>
         </header>
 
@@ -655,7 +655,7 @@ function App() {
       <header className="app-header" style={{ position: 'relative', zIndex: 10 }}>
         <div className="brand" onClick={handleLeaveRoom} style={{ cursor: 'pointer' }}>
           <div className="brand-icon" />
-          <span>Antigravity Zen</span>
+          <span>ZenWorld</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {/* Language Selector */}

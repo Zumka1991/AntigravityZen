@@ -2,7 +2,7 @@ export type Language = 'en' | 'ru';
 
 export const translations = {
   en: {
-    welcomeTitle: 'Welcome to Zen Space',
+    welcomeTitle: 'Welcome to ZenWorld',
     welcomeDesc: 'Join a room or create your own to begin a synced meditation session.',
     save: 'Save',
     cancel: 'Cancel',
@@ -66,7 +66,7 @@ export const translations = {
     'ambient-rain': 'Gentle Rain & Thunder',
     'tibetan-bowls': 'Tibetan Singing Bowls Meditation',
     'deep-relaxation': 'Deep Sleep & Astral Relaxation',
-    loginTitle: 'Sign In to Zen Space',
+    loginTitle: 'Sign In to ZenWorld',
     registerTitle: 'Create an Account',
     usernameLabel: 'Username',
     usernamePlaceholder: 'Enter your username',
@@ -113,7 +113,7 @@ export const translations = {
     selectRecordingLabel: 'Choose Recorded Meditation',
   },
   ru: {
-    welcomeTitle: 'Добро пожаловать в Zen Space',
+    welcomeTitle: 'Добро пожаловать в ZenWorld',
     welcomeDesc: 'Присоединяйтесь к комнате или создайте свою, чтобы начать сессию медитации.',
     save: 'Сохранить',
     cancel: 'Отмена',
@@ -177,7 +177,7 @@ export const translations = {
     'ambient-rain': 'Нежный дождь и гроза',
     'tibetan-bowls': 'Тибетские поющие чаши',
     'deep-relaxation': 'Глубокое астральное расслабление',
-    loginTitle: 'Вход в Zen Space',
+    loginTitle: 'Вход в ZenWorld',
     registerTitle: 'Регистрация аккаунта',
     usernameLabel: 'Имя пользователя',
     usernamePlaceholder: 'Введите имя пользователя',
