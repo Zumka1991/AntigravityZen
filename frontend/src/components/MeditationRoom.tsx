@@ -1053,44 +1053,36 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                   </div>
                 )}
 
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => {
-                    const voiceTrackParam = (selectedVoiceTrackId === 'live' || selectedVoiceTrackId === 'none') ? undefined : selectedVoiceTrackId;
-                    onStartMeditation(selectedTrackId, selectedDuration, voiceTrackParam);
-                  }}
-                  style={{ width: '100%', marginTop: '0.5rem', padding: '0.9rem', borderRadius: '12px' }}
-                >
-                  {t.startSessionBtn}
-                </button>
-
-                {isHost && (
-                  <button 
-                    type="button"
-                    className="btn" 
-                    onClick={toggleMicrophone} 
-                    style={{ 
-                      width: '100%', 
-                      marginTop: '0.5rem',
-                      padding: '0.75rem', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      gap: '0.35rem',
-                      borderRadius: '12px',
-                      fontWeight: 600,
-                      background: isMicrophoneActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                      border: isMicrophoneActive ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
-                      color: isMicrophoneActive ? '#f87171' : 'var(--color-text-primary)',
-                      transform: isMicrophoneActive ? `scale(${1 + (streamingMicLevel / 100) * 0.08})` : undefined,
-                      boxShadow: isMicrophoneActive ? `0 0 ${8 + (streamingMicLevel / 100) * 16}px rgba(239, 68, 68, ${0.25 + (streamingMicLevel / 100) * 0.45})` : undefined,
-                      transition: 'transform 0.08s ease, box-shadow 0.08s ease, background 0.3s ease, border 0.3s ease'
+                <div className="session-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      const voiceTrackParam = (selectedVoiceTrackId === 'live' || selectedVoiceTrackId === 'none') ? undefined : selectedVoiceTrackId;
+                      onStartMeditation(selectedTrackId, selectedDuration, voiceTrackParam);
                     }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-                    {isMicrophoneActive ? t.muteMic : t.useMic}
+                    {t.startSessionBtn}
                   </button>
-                )}
+
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="btn session-mic-button"
+                      onClick={toggleMicrophone}
+                      style={{
+                        background: isMicrophoneActive ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                        border: isMicrophoneActive ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: isMicrophoneActive ? '#f87171' : 'var(--color-text-primary)',
+                        transform: isMicrophoneActive ? `scale(${1 + (streamingMicLevel / 100) * 0.08})` : undefined,
+                        boxShadow: isMicrophoneActive ? `0 0 ${8 + (streamingMicLevel / 100) * 16}px rgba(239, 68, 68, ${0.25 + (streamingMicLevel / 100) * 0.45})` : undefined,
+                        transition: 'transform 0.08s ease, box-shadow 0.08s ease, background 0.3s ease, border 0.3s ease'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                      {isMicrophoneActive ? t.muteMic : t.useMic}
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>

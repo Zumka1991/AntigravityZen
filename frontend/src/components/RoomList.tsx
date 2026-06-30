@@ -147,12 +147,12 @@ export const RoomList: React.FC<RoomListProps> = ({
   };
 
   return (
-    <div style={{ position: 'relative', zIndex: 10 }}>
+    <div className="lobby-page">
       {/* Welcome / Username Banner */}
-      <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <section className="glass-panel welcome-panel">
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '0.25rem' }}>{t.welcomeTitle}</h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>{t.welcomeDesc}</p>
+          <h1>{t.welcomeTitle}</h1>
+          <p>{t.welcomeDesc}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div className="user-badge">
@@ -160,11 +160,14 @@ export const RoomList: React.FC<RoomListProps> = ({
             <span>{username}</span>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Title & Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t.activeRooms}</h2>
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{rooms.length} · {t.globalChatLive}</span>
+          <h2>{t.activeRooms}</h2>
+        </div>
         <button className="btn btn-primary" onClick={() => {
           if (ambientTracks.length > 0 && !selectedTrackId) {
             setSelectedTrackId(ambientTracks[0].id);
@@ -180,8 +183,8 @@ export const RoomList: React.FC<RoomListProps> = ({
 
       {/* Rooms Grid */}
       {rooms.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="glass-panel empty-state">
+          <div className="empty-state-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           </div>
           <div>

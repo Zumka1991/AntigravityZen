@@ -530,11 +530,11 @@ function App() {
 
   if (isCheckingToken) {
     return (
-      <div className="app-container">
+      <div className="app-container app-loading">
         <div className="glow-orb glow-purple" />
         <div className="glow-orb glow-teal" />
-        <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
-          <div className="brand-icon" style={{ width: '48px', height: '48px', animation: 'pulseLight 1s infinite alternate' }} />
+        <div className="loading-state" role="status" aria-label={lang === 'ru' ? 'Загрузка' : 'Loading'}>
+          <div className="brand-icon loading-mark" />
         </div>
       </div>
     );
@@ -542,83 +542,78 @@ function App() {
 
   if (!token) {
     return (
-      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '1rem' }}>
+      <div className="app-container auth-page">
         <div className="glow-orb glow-purple" />
         <div className="glow-orb glow-teal" />
         
-        <header className="app-header" style={{ borderBottom: 'none', marginBottom: '1.5rem', width: '100%', maxWidth: '400px', justifyContent: 'center' }}>
+        <header className="app-header auth-header">
           <div className="brand">
             <div className="brand-icon" />
             <span>ZenWorld</span>
           </div>
         </header>
 
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem 2rem', position: 'relative', zIndex: 10 }}>
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center', fontFamily: 'var(--font-heading)' }}>
+        <div className="glass-panel auth-card">
+          <div className="auth-intro">
+          <h1>
             {showLogin ? t.loginTitle : t.registerTitle}
-          </h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginBottom: '2rem', textAlign: 'center' }}>
+          </h1>
+          <p>
             {t.welcomeDesc}
           </p>
+          </div>
 
-          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+          <form onSubmit={handleAuthSubmit} className="auth-form">
+            <div className="form-group">
+              <label htmlFor="auth-username">
                 {t.usernameLabel}
               </label>
               <input
+                id="auth-username"
                 type="text"
                 placeholder={t.usernamePlaceholder}
                 value={authUsername}
                 onChange={(e) => setAuthUsername(e.target.value)}
                 required
-                style={{ padding: '0.75rem 1rem', borderRadius: '12px' }}
+                autoComplete="username"
               />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            <div className="form-group">
+              <label htmlFor="auth-password">
                 {t.passwordLabel}
               </label>
               <input
+                id="auth-password"
                 type="password"
                 placeholder={t.passwordPlaceholder}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 required
-                style={{ padding: '0.75rem 1rem', borderRadius: '12px' }}
+                autoComplete={showLogin ? 'current-password' : 'new-password'}
               />
             </div>
 
             {authError && (
-              <div style={{ color: 'var(--color-accent)', fontSize: '0.85rem', background: 'rgba(244, 63, 94, 0.05)', border: '1px solid rgba(244, 63, 94, 0.15)', padding: '0.75rem', borderRadius: '10px', textAlign: 'center' }}>
+              <div className="notice notice-error" role="alert">
                 {authError}
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary" style={{ padding: '0.85rem', borderRadius: '12px', marginTop: '0.5rem', fontWeight: 700, cursor: 'pointer' }}>
+            <button type="submit" className="btn btn-primary auth-submit">
               {showLogin ? t.signInBtn : t.signUpBtn}
             </button>
           </form>
 
-          <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>
+          <div className="auth-switch">
             <span>{showLogin ? t.noAccountPrompt : t.haveAccountPrompt} </span>
             <button
-              className="btn"
+              className="text-button"
+              type="button"
               onClick={() => {
                 setShowLogin(!showLogin);
                 setAuthError(null);
                 setAuthPassword('');
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                boxShadow: 'none',
-                color: 'var(--color-primary)',
-                padding: '0 0.25rem',
-                fontWeight: 600,
-                textDecoration: 'underline',
-                cursor: 'pointer'
               }}
             >
               {showLogin ? t.signUpBtn : t.signInBtn}
@@ -627,34 +622,16 @@ function App() {
         </div>
         
         {/* Language Selector at the bottom of login */}
-        <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255, 255, 255, 0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)', marginTop: '2rem' }}>
+        <div className="language-switcher auth-language" aria-label={lang === 'ru' ? 'Язык' : 'Language'}>
           <button 
-            className="btn" 
+            className={`language-option ${lang === 'ru' ? 'active' : ''}`}
             onClick={() => handleSetLang('ru')} 
-            style={{ 
-              padding: '0.35rem 0.65rem', 
-              fontSize: '0.75rem', 
-              borderRadius: '8px',
-              background: lang === 'ru' ? 'var(--color-primary)' : 'transparent',
-              color: lang === 'ru' ? '#06050e' : 'var(--color-text-secondary)',
-              boxShadow: lang === 'ru' ? '0 2px 10px var(--color-primary-glow)' : 'none',
-              fontWeight: 700
-            }}
           >
             RU
           </button>
           <button 
-            className="btn" 
+            className={`language-option ${lang === 'en' ? 'active' : ''}`}
             onClick={() => handleSetLang('en')} 
-            style={{ 
-              padding: '0.35rem 0.65rem', 
-              fontSize: '0.75rem', 
-              borderRadius: '8px',
-              background: lang === 'en' ? 'var(--color-primary)' : 'transparent',
-              color: lang === 'en' ? '#06050e' : 'var(--color-text-secondary)',
-              boxShadow: lang === 'en' ? '0 2px 10px var(--color-primary-glow)' : 'none',
-              fontWeight: 700
-            }}
           >
             EN
           </button>
@@ -670,59 +647,31 @@ function App() {
       <div className="glow-orb glow-teal" />
 
       {/* Main Header */}
-      <header className="app-header" style={{ position: 'relative', zIndex: 10 }}>
-        <div className="brand" onClick={handleLeaveRoom} style={{ cursor: 'pointer' }}>
+      <header className="app-header main-header">
+        <button className="brand brand-button" onClick={handleLeaveRoom} aria-label="ZenWorld">
           <div className="brand-icon" />
           <span>ZenWorld</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        </button>
+        <div className="header-actions">
           {/* Language Selector */}
-          <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255, 255, 255, 0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+          <div className="language-switcher" aria-label={lang === 'ru' ? 'Язык' : 'Language'}>
             <button 
-              className="btn" 
+              className={`language-option ${lang === 'ru' ? 'active' : ''}`}
               onClick={() => handleSetLang('ru')} 
-              style={{ 
-                padding: '0.35rem 0.65rem', 
-                fontSize: '0.75rem', 
-                borderRadius: '8px',
-                background: lang === 'ru' ? 'var(--color-primary)' : 'transparent',
-                color: lang === 'ru' ? '#06050e' : 'var(--color-text-secondary)',
-                boxShadow: lang === 'ru' ? '0 2px 10px var(--color-primary-glow)' : 'none',
-                fontWeight: 700
-              }}
             >
               RU
             </button>
             <button 
-              className="btn" 
+              className={`language-option ${lang === 'en' ? 'active' : ''}`}
               onClick={() => handleSetLang('en')} 
-              style={{ 
-                padding: '0.35rem 0.65rem', 
-                fontSize: '0.75rem', 
-                borderRadius: '8px',
-                background: lang === 'en' ? 'var(--color-primary)' : 'transparent',
-                color: lang === 'en' ? '#06050e' : 'var(--color-text-secondary)',
-                boxShadow: lang === 'en' ? '0 2px 10px var(--color-primary-glow)' : 'none',
-                fontWeight: 700
-              }}
             >
               EN
             </button>
           </div>
           {!activeRoom && token && (
             <button 
-              className="btn" 
+              className="btn btn-quiet"
               onClick={() => setShowAdminPanel(true)}
-              style={{ 
-                padding: '0.35rem 0.65rem', 
-                fontSize: '0.75rem', 
-                borderRadius: '8px',
-                background: 'rgba(167, 139, 250, 0.1)',
-                color: 'var(--color-primary)',
-                border: '1px solid rgba(167, 139, 250, 0.2)',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
             >
               {t.adminAccessBtn}
             </button>
@@ -734,18 +683,8 @@ function App() {
                 <span>{username}</span>
               </div>
               <button 
-                className="btn" 
+                className="btn logout-button"
                 onClick={handleLogout}
-                style={{ 
-                  padding: '0.35rem 0.65rem', 
-                  fontSize: '0.75rem', 
-                  borderRadius: '8px',
-                  background: 'rgba(244, 63, 94, 0.1)',
-                  color: 'var(--color-accent)',
-                  border: '1px solid rgba(244, 63, 94, 0.2)',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
               >
                 {t.logoutBtn}
               </button>
@@ -755,9 +694,9 @@ function App() {
       </header>
 
       {connectionError && (
-        <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', border: '1px solid var(--color-accent)', background: 'rgba(244, 63, 94, 0.05)', color: 'var(--color-text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 10 }}>
+        <div className="notice notice-error connection-notice" role="alert">
           <span>{connectionError}</span>
-          <button className="btn btn-secondary" onClick={() => setConnectionError(null)} style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', borderRadius: '6px' }}>Dismiss</button>
+          <button className="notice-close" onClick={() => setConnectionError(null)} aria-label="Dismiss">×</button>
         </div>
       )}
 
@@ -823,7 +762,7 @@ function App() {
 
       {/* Admin Panel Modal Overlay */}
       {showAdminPanel && (
-        <div style={{
+        <div className="admin-overlay" style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -837,7 +776,7 @@ function App() {
           zIndex: 100,
           padding: '1.5rem'
         }}>
-          <div className="glass-panel" style={{
+          <div className="glass-panel admin-panel" style={{
             width: '100%',
             maxWidth: '650px',
             padding: '2.5rem',
@@ -848,7 +787,7 @@ function App() {
             gap: '2rem',
             border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="admin-panel-header">
               <div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-heading)', marginBottom: '0.35rem' }}>
                   {t.adminPanelTitle}
