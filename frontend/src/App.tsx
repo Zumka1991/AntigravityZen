@@ -61,7 +61,7 @@ function App() {
     return id;
   });
 
-  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string } | null>(null);
+  const [activeRoom, setActiveRoom] = useState<{ id: string; name: string | null; duration?: number; trackId?: string; voiceTrackId?: string } | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -191,7 +191,8 @@ function App() {
     try {
       const durationParam = activeRoom.duration ? `&duration=${activeRoom.duration}` : '';
       const trackParam = activeRoom.trackId ? `&trackId=${activeRoom.trackId}` : '';
-      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}`;
+      const voiceTrackParam = activeRoom.voiceTrackId ? `&voiceTrackId=${activeRoom.voiceTrackId}` : '';
+      const wsUrl = `${WS_BASE}?roomId=${activeRoom.id}&token=${token}&clientId=${clientId}&roomName=${encodeURIComponent(activeRoom.name || '')}${durationParam}${trackParam}${voiceTrackParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -208,9 +209,24 @@ function App() {
           try {
             const data = JSON.parse(line);
             switch (data.type) {
-              case 'room_state':
-                setRoomState(data.payload);
+              case 'room_state': {
+                const payload = data.payload;
+                setRoomState(payload);
+                // Auto-start static voice playback if room has a voiceTrack and is playing
+                if (payload.status === 'playing' && payload.voiceTrack) {
+                  setVoiceFileUrl(payload.voiceTrack.audioUrl);
+                  setIsVoiceStatic(true);
+                  setVoiceNarrator(payload.voiceTrack.ownerUsername || 'recorded');
+                } else if (payload.status !== 'playing') {
+                  // Only clear voice state from voiceTrack; live voice_stop handles live streams
+                  if (payload.voiceTrack) {
+                    setVoiceNarrator(null);
+                    setVoiceFileUrl(null);
+                    setIsVoiceStatic(false);
+                  }
+                }
                 break;
+              }
               case 'chat':
                 setChatMessages((prev) => [...prev, {
                   type: 'chat',
@@ -296,9 +312,9 @@ function App() {
     setActiveRoom({ id: roomId, name: null });
   };
 
-  const handleCreateRoom = (roomName: string, duration: number, trackId: string) => {
+  const handleCreateRoom = (roomName: string, duration: number, trackId: string, voiceTrackId?: string) => {
     const roomId = generateId().slice(0, 8);
-    setActiveRoom({ id: roomId, name: roomName, duration, trackId });
+    setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId });
   };
 
   const handleLeaveRoom = () => {

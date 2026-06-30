@@ -46,6 +46,7 @@ type RoomState struct {
 	Clients       []User    `json:"clients"`
 	Status        string    `json:"status"` // "lobby", "playing", "finished"
 	ActiveTrack   *Track    `json:"activeTrack,omitempty"`
+	VoiceTrack    *Track    `json:"voiceTrack,omitempty"`
 	Duration      int       `json:"duration,omitempty"` // selected duration in seconds
 	StartedAt     int64     `json:"startedAt,omitempty"` // Unix timestamp in ms
 	ServerTime    int64     `json:"serverTime"` // current server Unix timestamp in ms
@@ -59,15 +60,16 @@ type User struct {
 
 // Client represents a connected websocket client
 type Client struct {
-	Hub             *Hub
-	Conn            *websocket.Conn
-	Send            chan []byte
-	RoomID          string
-	RoomName        string
-	ID              string
-	Username        string
-	InitialDuration int
-	InitialTrackID  string
+	Hub                  *Hub
+	Conn                 *websocket.Conn
+	Send                 chan []byte
+	RoomID               string
+	RoomName             string
+	ID                   string
+	Username             string
+	InitialDuration      int
+	InitialTrackID       string
+	InitialVoiceTrackID  string
 }
 
 // Room represents a single meditation session room
@@ -78,6 +80,7 @@ type Room struct {
 	Clients        map[*Client]bool
 	Status         string // "lobby", "playing", "finished"
 	ActiveTrack    *Track
+	VoiceTrack     *Track // pre-recorded voice accompaniment
 	Duration       int // in seconds
 	StartedAt      int64 // timestamp in ms
 	VoiceFile      *os.File
@@ -117,6 +120,7 @@ func (h *Hub) Run() {
 				if track == nil && len(GetTracks()) > 0 {
 					track = &GetTracks()[0]
 				}
+				voiceTrack := FindTrack(client.InitialVoiceTrackID)
 				duration := client.InitialDuration
 				if duration <= 0 {
 					duration = 60 // 1 minute default
@@ -129,6 +133,7 @@ func (h *Hub) Run() {
 					Clients:     make(map[*Client]bool),
 					Status:      "lobby",
 					ActiveTrack: track,
+					VoiceTrack:  voiceTrack,
 					Duration:    duration,
 				}
 				h.Rooms[client.RoomID] = room
@@ -136,7 +141,11 @@ func (h *Hub) Run() {
 				if track != nil {
 					trackTitle = track.Title
 				}
-				log.Printf("Created room %s with host %s, name %s, duration %ds, track %s", client.RoomID, client.Username, name, duration, trackTitle)
+				voiceTitle := "none"
+				if voiceTrack != nil {
+					voiceTitle = voiceTrack.Title
+				}
+				log.Printf("Created room %s with host %s, name %s, duration %ds, track %s, voice %s", client.RoomID, client.Username, name, duration, trackTitle, voiceTitle)
 			}
 
 			room.Mutex.Lock()
@@ -220,6 +229,7 @@ func (h *Hub) BroadcastRoomState(roomID string) {
 		Clients:     users,
 		Status:      room.Status,
 		ActiveTrack: room.ActiveTrack,
+		VoiceTrack:  room.VoiceTrack,
 		Duration:    room.Duration,
 		StartedAt:   room.StartedAt,
 		ServerTime:  time.Now().UnixNano() / int64(time.Millisecond),
@@ -330,7 +340,7 @@ func (h *Hub) SendChatHistory(client *Client) {
 }
 
 // ServeWs upgrades HTTP connection to websocket
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, username string, clientID string, roomName string, initialDuration int, initialTrackID string) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, username string, clientID string, roomName string, initialDuration int, initialTrackID string, initialVoiceTrackID string) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -338,15 +348,16 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, roomID string, us
 	}
 
 	client := &Client{
-		Hub:             hub,
-		Conn:            conn,
-		Send:            make(chan []byte, 256),
-		RoomID:          roomID,
-		RoomName:        roomName,
-		ID:              clientID,
-		Username:        username,
-		InitialDuration: initialDuration,
-		InitialTrackID:  initialTrackID,
+		Hub:                 hub,
+		Conn:                conn,
+		Send:                make(chan []byte, 256),
+		RoomID:              roomID,
+		RoomName:            roomName,
+		ID:                  clientID,
+		Username:            username,
+		InitialDuration:     initialDuration,
+		InitialTrackID:      initialTrackID,
+		InitialVoiceTrackID: initialVoiceTrackID,
 	}
 
 	client.Hub.Register <- client

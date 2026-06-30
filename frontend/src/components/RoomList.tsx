@@ -24,7 +24,7 @@ interface RoomListProps {
   tracks: Track[];
   username: string;
   onJoinRoom: (roomId: string) => void;
-  onCreateRoom: (roomName: string, duration: number, trackId: string) => void;
+  onCreateRoom: (roomName: string, duration: number, trackId: string, voiceTrackId?: string) => void;
   t: typeof translations.en;
 }
 
@@ -40,7 +40,9 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [roomName, setRoomName] = useState('');
   const [duration, setDuration] = useState(60);
   const ambientTracks = tracks.filter(t => !t.ownerUsername);
+  const recordedTracks = tracks.filter(t => !!t.ownerUsername);
   const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
+  const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('none');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -109,7 +111,8 @@ export const RoomList: React.FC<RoomListProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomName.trim()) return;
-    onCreateRoom(roomName.trim(), duration, selectedTrackId);
+    const voiceId = selectedVoiceTrackId !== 'none' ? selectedVoiceTrackId : undefined;
+    onCreateRoom(roomName.trim(), duration, selectedTrackId, voiceId);
     setShowCreateModal(false);
     setRoomName('');
   };
@@ -300,6 +303,95 @@ export const RoomList: React.FC<RoomListProps> = ({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Voice Accompaniment Selector */}
+              <div className="form-group">
+                <label>
+                  🎙️ {t.durationMinutes === 'мин' ? 'Голосовое сопровождение' : 'Voice Accompaniment'}
+                </label>
+
+                {recordedTracks.length === 0 ? (
+                  <div style={{
+                    padding: '0.85rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px dashed rgba(255, 255, 255, 0.08)',
+                    borderRadius: '10px',
+                    fontSize: '0.82rem',
+                    color: 'var(--color-text-secondary)',
+                    textAlign: 'center',
+                    lineHeight: '1.5'
+                  }}>
+                    {t.durationMinutes === 'мин'
+                      ? 'Нет записанных медитаций. Войдите в комнату как диктор и запишите сессию.'
+                      : 'No recorded meditations yet. Enter a room as host and record a session.'}
+                  </div>
+                ) : (
+                  <div className="track-selector">
+                    {/* "No voice" option */}
+                    <div
+                      className={`track-option ${selectedVoiceTrackId === 'none' ? 'selected' : ''}`}
+                      onClick={() => setSelectedVoiceTrackId('none')}
+                      style={{ opacity: 0.7 }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                          🔇 {t.durationMinutes === 'мин' ? 'Без голоса (только музыка)' : 'No Voice (Music Only)'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {recordedTracks.map((track) => (
+                      <div
+                        key={track.id}
+                        className={`track-option ${selectedVoiceTrackId === track.id ? 'selected' : ''}`}
+                        onClick={() => setSelectedVoiceTrackId(track.id)}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>💾 {track.title}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                            {track.ownerUsername} • {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={(e) => togglePreview(track, e)}
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              background: previewTrackId === track.id ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.05)',
+                              color: '#fff',
+                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
+                            }}
+                          >
+                            {previewTrackId === track.id ? (
+                              <>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                <span>{t.stopPreviewBtn}</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+                                <span>{t.previewBtn}</span>
+                              </>
+                            )}
+                          </button>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                            {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
