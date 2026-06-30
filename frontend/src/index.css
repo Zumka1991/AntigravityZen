@@ -456,10 +456,40 @@ input[type="range"]:focus {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 1.5rem 2rem 2rem 2rem;
+  padding: 0;
   position: relative;
-  overflow-y: auto;
+  overflow: hidden;
   height: 100%;
+}
+
+.meditation-scroll-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 1.5rem 2rem 2rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 153, 255, 0.5) transparent;
+}
+
+.meditation-scroll-content::-webkit-scrollbar {
+  width: 7px;
+}
+
+.meditation-scroll-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.meditation-scroll-content::-webkit-scrollbar-thumb {
+  background: rgba(169, 153, 255, 0.45);
+  border-radius: 999px;
 }
 
 .side-panel {
@@ -1089,6 +1119,13 @@ body:has(.in-room) {
     min-height: 0 !important;
     display: flex;
     flex-direction: column;
+  }
+
+  .meditation-scroll-content {
+    height: auto;
+    padding: 1.5rem 1rem 2rem;
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 }
 

@@ -697,6 +697,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
           />
         )}
 
+        <div className="meditation-scroll-content">
         {/* Top bar controls */}
         <div className="room-top-bar">
           <button 
@@ -1098,6 +1099,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Side Panel: Members & Chat */}
