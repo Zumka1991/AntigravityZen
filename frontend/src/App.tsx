@@ -139,7 +139,9 @@ function App() {
   const fetchTracks = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_BASE}/tracks`);
+      const res = await fetch(`${API_BASE}/tracks`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         setTracks(data);
