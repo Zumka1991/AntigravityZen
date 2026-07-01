@@ -33,6 +33,25 @@ func authenticateUser(c *gin.Context, authManager *room.AuthManager) (string, bo
 	return username, true
 }
 
+func getRegisteredUser(c *gin.Context, authManager *room.AuthManager) (string, bool) {
+	token := c.GetHeader("Authorization")
+	if token == "" {
+		token = c.Query("token")
+	} else {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+	username, isGuest, valid := authManager.ValidateSession(token)
+	if !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return "", false
+	}
+	if isGuest {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Registration required"})
+		return "", false
+	}
+	return username, true
+}
+
 // GetTracksHandler handles GET /api/tracks
 func GetTracksHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -52,8 +71,13 @@ func GetTracksHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // AddTrackHandler handles POST /api/tracks
 func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, valid := authenticateUser(c, authManager)
-		if !valid {
+		username, ok := getRegisteredUser(c, authManager)
+		if !ok {
+			return
+		}
+
+		if !room.TrackUploadRateLimiter.Allow(username) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
 			return
 		}
 
@@ -122,8 +146,8 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // DeleteTrackHandler handles DELETE /api/tracks
 func DeleteTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, valid := authenticateUser(c, authManager)
-		if !valid {
+		username, ok := getRegisteredUser(c, authManager)
+		if !ok {
 			return
 		}
 

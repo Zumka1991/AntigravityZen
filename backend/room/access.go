@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -45,6 +46,27 @@ func (h *Hub) PrepareRoomAccess(roomID, password, username, clientID string, cre
 			return "", errors.New("invalid room password")
 		}
 	} else if creating {
+		// Limit the number of active rooms a user can host
+		activeHosted := 0
+		for _, rm := range h.Rooms {
+			rm.Mutex.RLock()
+			hostUsername := rm.HostUsername
+			rm.Mutex.RUnlock()
+			if strings.EqualFold(hostUsername, username) {
+				activeHosted++
+			}
+		}
+		for _, ticket := range h.AccessTickets {
+			if strings.EqualFold(ticket.Username, username) {
+				if _, exists := h.Rooms[ticket.RoomID]; !exists {
+					activeHosted++
+				}
+			}
+		}
+		if activeHosted >= 3 {
+			return "", errors.New("you have reached the limit of active rooms you can host (max 3)")
+		}
+
 		if len(password) < 4 {
 			return "", errors.New("room password must be at least 4 characters")
 		}

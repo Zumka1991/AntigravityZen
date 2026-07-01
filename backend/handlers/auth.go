@@ -33,6 +33,11 @@ func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			}
 		}
 
+		if !room.AuthIPRateLimiter.Allow(c.ClientIP()) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
+
 		username, token, err := authManager.CreateGuest()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not start guest session"})
@@ -50,6 +55,10 @@ func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // RegisterHandler handles POST /api/register
 func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !room.AuthIPRateLimiter.Allow(c.ClientIP()) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
 		var payload struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -77,6 +86,10 @@ func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 // LoginHandler handles POST /api/login
 func LoginHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !room.AuthIPRateLimiter.Allow(c.ClientIP()) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
 		var payload struct {
 			Username string `json:"username"`
 			Password string `json:"password"`

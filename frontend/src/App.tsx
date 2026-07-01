@@ -1432,38 +1432,52 @@ function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div className="audio-duration-field">
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackDurationLabel}
                 </label>
-                <input
-                  type="number"
-                  placeholder={t.trackDurationPlaceholder}
-                  value={trackDuration}
-                  onChange={(e) => {
-                    setTrackDuration(e.target.value);
-                    setDurationDetection('manual');
-                  }}
-                  required
-                  min="1"
-                  disabled={isUploading || durationDetection === 'detecting'}
-                  style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
-                />
-                {durationDetection !== 'idle' && (
-                  <span className={`audio-duration-status ${durationDetection}`}>
+                {(durationDetection === 'failed' || durationDetection === 'manual') ? (
+                  <>
+                    <input
+                      type="number"
+                      placeholder={t.trackDurationPlaceholder}
+                      value={trackDuration}
+                      onChange={(e) => {
+                        setTrackDuration(e.target.value);
+                        setDurationDetection('manual');
+                      }}
+                      required
+                      min="1"
+                      disabled={isUploading}
+                      style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
+                    />
+                    <span className="audio-duration-status failed">
+                      {durationDetection === 'failed'
+                        ? (lang === 'ru'
+                          ? 'Метаданные не прочитались — укажите секунды вручную'
+                          : 'Metadata could not be read — enter seconds manually')
+                        : (lang === 'ru' ? 'Указано вручную' : 'Entered manually')}
+                    </span>
+                  </>
+                ) : (
+                  <div className={`audio-duration-display ${durationDetection}`}>
+                    {durationDetection === 'idle' && (lang === 'ru'
+                      ? 'Определится после выбора файла'
+                      : 'Detected after choosing a file')}
                     {durationDetection === 'detecting' && (lang === 'ru'
-                      ? 'Считываем длительность файла…'
-                      : 'Reading audio duration…')}
-                    {durationDetection === 'detected' && trackDuration && (lang === 'ru'
-                      ? `Определено автоматически: ${Math.floor(Number(trackDuration) / 60)}:${String(Number(trackDuration) % 60).padStart(2, '0')}`
-                      : `Detected automatically: ${Math.floor(Number(trackDuration) / 60)}:${String(Number(trackDuration) % 60).padStart(2, '0')}`)}
-                    {durationDetection === 'manual' && (lang === 'ru'
-                      ? 'Длительность изменена вручную'
-                      : 'Duration adjusted manually')}
-                    {durationDetection === 'failed' && (lang === 'ru'
-                      ? 'Не удалось прочитать метаданные — укажите секунды вручную'
-                      : 'Could not read metadata — enter seconds manually')}
-                  </span>
+                      ? 'Считываем метаданные…'
+                      : 'Reading metadata…')}
+                    {durationDetection === 'detected' && trackDuration && (
+                      <>
+                        <span aria-hidden="true">✓</span>
+                        <strong>
+                          {Math.floor(Number(trackDuration) / 60)}:
+                          {String(Number(trackDuration) % 60).padStart(2, '0')}
+                        </strong>
+                        <small>{lang === 'ru' ? 'определено автоматически' : 'detected automatically'}</small>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1471,7 +1485,7 @@ function App() {
                 <button 
                   type="submit" 
                   className="btn btn-primary" 
-                  disabled={isUploading}
+                  disabled={isUploading || !trackFile || !trackDuration}
                   style={{ 
                     width: '100%', 
                     padding: '0.65rem', 

@@ -65,6 +65,16 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
   const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('none');
   const [selectedBackgroundId, setSelectedBackgroundId] = useState(backgrounds[0]?.id || '');
+  const [useTrackDuration, setUseTrackDuration] = useState(false);
+
+  React.useEffect(() => {
+    if (useTrackDuration) {
+      const selectedTrack = tracks.find(tr => tr.id === selectedTrackId);
+      if (selectedTrack && selectedTrack.duration > 0) {
+        setDuration(selectedTrack.duration);
+      }
+    }
+  }, [useTrackDuration, selectedTrackId, tracks]);
   const [openCreationSection, setOpenCreationSection] = useState<'sound' | 'background' | 'voice' | null>('sound');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -329,13 +339,30 @@ export const RoomList: React.FC<RoomListProps> = ({
                   step="30"
                   value={duration}
                   onChange={(e) => setDuration(Number(e.target.value))}
-                  style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                  disabled={useTrackDuration}
+                  style={{
+                    cursor: useTrackDuration ? 'not-allowed' : 'pointer',
+                    accentColor: 'var(--color-primary)',
+                    opacity: useTrackDuration ? 0.6 : 1
+                  }}
                 />
                 <div style={{ position: 'relative', height: '1.2rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '0.2rem' }}>
                   <span style={{ position: 'absolute', left: '0%' }}>30{t.durationSeconds}</span>
                   <span style={{ position: 'absolute', left: '25%', transform: 'translateX(-50%)' }}>30{t.durationMinutes}</span>
                   <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>1{t.durationMinutes === 'мин' ? 'ч' : 'h'}</span>
                   <span style={{ position: 'absolute', right: '0%' }}>2{t.durationMinutes === 'мин' ? 'ч' : 'h'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    id="useTrackDurationRoom"
+                    checked={useTrackDuration}
+                    onChange={(e) => setUseTrackDuration(e.target.checked)}
+                    style={{ marginRight: '0.5rem', width: 'auto', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useTrackDurationRoom" style={{ cursor: 'pointer', margin: 0, fontWeight: 'normal' }}>
+                    {t.durationMinutes === 'мин' ? 'Установить по длине трека' : 'Set by track duration'}
+                  </label>
                 </div>
               </div>
 

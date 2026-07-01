@@ -20,6 +20,11 @@ func RoomAccessHandler(hub *room.Hub, authManager *room.AuthManager) gin.Handler
 			return
 		}
 
+		if !room.RoomAccessRateLimiter.Allow(username) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
+
 		var request struct {
 			RoomID   string `json:"roomId"`
 			Password string `json:"password"`

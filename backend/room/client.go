@@ -193,6 +193,22 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 			return
 		}
 		if payload.Text != "" {
+			if !RoomChatRateLimiter.Allow(c.Username) {
+				payloadBytes, _ := json.Marshal(ChatPayload{Text: "You are sending messages too fast."})
+				errMsg := Message{
+					Type:      "chat",
+					Payload:   payloadBytes,
+					Username:  "System",
+					Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
+				}
+				if msgBytes, err := json.Marshal(errMsg); err == nil {
+					select {
+					case c.Send <- msgBytes:
+					default:
+					}
+				}
+				return
+			}
 			c.Hub.BroadcastChatMessage(c.RoomID, c.Username, payload.Text)
 		}
 

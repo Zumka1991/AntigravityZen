@@ -21,6 +21,20 @@ func eventUsername(c *gin.Context, authManager *room.AuthManager) (string, bool)
 	return username, ok
 }
 
+func registeredEventUsername(c *gin.Context, authManager *room.AuthManager) (string, bool) {
+	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	username, isGuest, valid := authManager.ValidateSession(token)
+	if !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return "", false
+	}
+	if isGuest {
+		c.JSON(http.StatusForbidden, gin.H{"error": "registration required"})
+		return "", false
+	}
+	return username, true
+}
+
 func GetMeditationEventsHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username, ok := eventUsername(c, authManager)
@@ -42,7 +56,7 @@ func GetMeditationEventsHandler(hub *room.Hub, authManager *room.AuthManager) gi
 
 func CreateMeditationEventHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, ok := eventUsername(c, authManager)
+		username, ok := registeredEventUsername(c, authManager)
 		if !ok {
 			return
 		}
@@ -93,7 +107,7 @@ func CreateMeditationEventHandler(authManager *room.AuthManager) gin.HandlerFunc
 
 func SetMeditationEventAttendanceHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, ok := eventUsername(c, authManager)
+		username, ok := registeredEventUsername(c, authManager)
 		if !ok {
 			return
 		}
@@ -114,7 +128,7 @@ func SetMeditationEventAttendanceHandler(authManager *room.AuthManager) gin.Hand
 
 func DeleteMeditationEventHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, ok := eventUsername(c, authManager)
+		username, ok := registeredEventUsername(c, authManager)
 		if !ok {
 			return
 		}

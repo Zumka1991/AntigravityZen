@@ -36,6 +36,10 @@ func AddGlobalChatMessageHandler(authManager *room.AuthManager) gin.HandlerFunc 
 		if !valid {
 			return
 		}
+		if !room.GlobalChatRateLimiter.Allow(username) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
 
 		var payload struct {
 			Text string `json:"text"`

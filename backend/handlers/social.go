@@ -124,6 +124,10 @@ func SendDirectMessageHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		if !ok {
 			return
 		}
+		if !room.DMRateLimiter.Allow(username) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please try again later."})
+			return
+		}
 		var payload struct {
 			Text string `json:"text"`
 		}

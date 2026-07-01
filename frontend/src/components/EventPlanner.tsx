@@ -73,6 +73,16 @@ export function EventPlanner({
   const [trackId, setTrackId] = useState('');
   const [voiceTrackId, setVoiceTrackId] = useState('none');
   const [backgroundId, setBackgroundId] = useState('');
+  const [useTrackDuration, setUseTrackDuration] = useState(false);
+
+  useEffect(() => {
+    if (useTrackDuration) {
+      const selectedTrack = tracks.find(tr => tr.id === trackId);
+      if (selectedTrack && selectedTrack.duration > 0) {
+        setDuration(selectedTrack.duration);
+      }
+    }
+  }, [useTrackDuration, trackId, tracks]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
@@ -536,12 +546,30 @@ export function EventPlanner({
                   step="30"
                   value={duration}
                   onChange={(event) => setDuration(Number(event.target.value))}
+                  disabled={useTrackDuration}
+                  style={{
+                    cursor: useTrackDuration ? 'not-allowed' : 'pointer',
+                    accentColor: 'var(--color-primary)',
+                    opacity: useTrackDuration ? 0.6 : 1
+                  }}
                 />
                 <div className="event-duration-scale" aria-hidden="true">
                   <span>30 {t.durationSeconds}</span>
                   <span>30 {t.durationMinutes}</span>
                   <span>1 {t.eventHours}</span>
                   <span>2 {t.eventHours}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    id="useTrackDurationEvent"
+                    checked={useTrackDuration}
+                    onChange={(e) => setUseTrackDuration(e.target.checked)}
+                    style={{ marginRight: '0.5rem', width: 'auto', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="useTrackDurationEvent" style={{ cursor: 'pointer', margin: 0, fontWeight: 'normal' }}>
+                    {t.durationMinutes === 'мин' ? 'Установить по длине трека' : 'Set by track duration'}
+                  </label>
                 </div>
               </div>
 

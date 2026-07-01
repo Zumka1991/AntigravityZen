@@ -451,6 +451,56 @@
   color: #fda4af;
 }
 
+.audio-duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.audio-duration-display {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.78rem;
+}
+
+.audio-duration-display.detecting {
+  color: #c4b5fd;
+}
+
+.audio-duration-display.detected {
+  border-style: solid;
+  border-color: rgba(45, 212, 191, 0.2);
+  color: #5eead4;
+  background: rgba(45, 212, 191, 0.06);
+}
+
+.audio-duration-display.detected > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(45, 212, 191, 0.12);
+  font-weight: 800;
+}
+
+.audio-duration-display strong {
+  color: #d5fff8;
+  font-size: 0.9rem;
+}
+
+.audio-duration-display small {
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+}
+
 .notification-count {
   display: inline-flex;
   align-items: center;
