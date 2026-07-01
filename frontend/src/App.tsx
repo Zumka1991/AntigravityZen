@@ -70,6 +70,7 @@ function App() {
   const [trackTitle, setTrackTitle] = useState('');
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
+  const [durationDetection, setDurationDetection] = useState<'idle' | 'detecting' | 'detected' | 'manual' | 'failed'>('idle');
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -707,6 +708,7 @@ function App() {
       setTrackTitle('');
       setTrackFile(null);
       setTrackDuration('');
+      setDurationDetection('idle');
       
       const fileInput = document.getElementById('admin-track-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
@@ -1386,18 +1388,31 @@ function App() {
                       if (e.target.files && e.target.files[0]) {
                         const selectedFile = e.target.files[0];
                         setTrackFile(selectedFile);
+                        setTrackDuration('');
+                        setDurationDetection('detecting');
 
                         const audio = document.createElement('audio');
                         const objectUrl = URL.createObjectURL(selectedFile);
+                        const cleanup = () => URL.revokeObjectURL(objectUrl);
                         audio.preload = 'metadata';
                         audio.onloadedmetadata = () => {
-                          if (Number.isFinite(audio.duration)) {
+                          if (Number.isFinite(audio.duration) && audio.duration > 0) {
                             setTrackDuration(Math.ceil(audio.duration).toString());
+                            setDurationDetection('detected');
+                          } else {
+                            setDurationDetection('failed');
                           }
-                          URL.revokeObjectURL(objectUrl);
+                          cleanup();
                         };
-                        audio.onerror = () => URL.revokeObjectURL(objectUrl);
+                        audio.onerror = () => {
+                          setDurationDetection('failed');
+                          cleanup();
+                        };
                         audio.src = objectUrl;
+                      } else {
+                        setTrackFile(null);
+                        setTrackDuration('');
+                        setDurationDetection('idle');
                       }
                     }}
                     required
@@ -1425,12 +1440,31 @@ function App() {
                   type="number"
                   placeholder={t.trackDurationPlaceholder}
                   value={trackDuration}
-                  onChange={(e) => setTrackDuration(e.target.value)}
+                  onChange={(e) => {
+                    setTrackDuration(e.target.value);
+                    setDurationDetection('manual');
+                  }}
                   required
                   min="1"
-                  disabled={isUploading}
+                  disabled={isUploading || durationDetection === 'detecting'}
                   style={{ padding: '0.6rem 0.9rem', fontSize: '0.9rem' }}
                 />
+                {durationDetection !== 'idle' && (
+                  <span className={`audio-duration-status ${durationDetection}`}>
+                    {durationDetection === 'detecting' && (lang === 'ru'
+                      ? 'Считываем длительность файла…'
+                      : 'Reading audio duration…')}
+                    {durationDetection === 'detected' && trackDuration && (lang === 'ru'
+                      ? `Определено автоматически: ${Math.floor(Number(trackDuration) / 60)}:${String(Number(trackDuration) % 60).padStart(2, '0')}`
+                      : `Detected automatically: ${Math.floor(Number(trackDuration) / 60)}:${String(Number(trackDuration) % 60).padStart(2, '0')}`)}
+                    {durationDetection === 'manual' && (lang === 'ru'
+                      ? 'Длительность изменена вручную'
+                      : 'Duration adjusted manually')}
+                    {durationDetection === 'failed' && (lang === 'ru'
+                      ? 'Не удалось прочитать метаданные — укажите секунды вручную'
+                      : 'Could not read metadata — enter seconds manually')}
+                  </span>
+                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>

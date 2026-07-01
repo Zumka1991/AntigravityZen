@@ -436,6 +436,21 @@
   color: #fda4af;
 }
 
+.audio-duration-status {
+  min-height: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.audio-duration-status.detected {
+  color: #5eead4;
+}
+
+.audio-duration-status.failed {
+  color: #fda4af;
+}
+
 .notification-count {
   display: inline-flex;
   align-items: center;
