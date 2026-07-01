@@ -6,6 +6,8 @@ import { MeditationRoom } from './components/MeditationRoom';
 import { GlobalChat } from './components/GlobalChat';
 import { BackgroundManager } from './components/BackgroundManager';
 import { AboutPage } from './components/AboutPage';
+import { EventPlanner } from './components/EventPlanner';
+import type { MeditationEvent } from './components/EventPlanner';
 import { translations } from './translations';
 import type { Language } from './translations';
 
@@ -89,6 +91,7 @@ function App() {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [backgrounds, setBackgrounds] = useState<MeditationBackground[]>([]);
+  const [events, setEvents] = useState<MeditationEvent[]>([]);
   const sharedTracks = tracks.filter((track) => !track.ownerUsername || track.isPublic);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [requestedRoomId, setRequestedRoomId] = useState<string | null>(null);
@@ -206,6 +209,18 @@ function App() {
     }
   };
 
+  const fetchEvents = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/events`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) setEvents(await res.json());
+    } catch (err) {
+      console.error('Error fetching events:', err);
+    }
+  };
+
   // Check for roomId query param on startup to auto-join
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -222,11 +237,13 @@ function App() {
     fetchTracks();
     fetchBackgrounds();
     fetchRooms();
+    fetchEvents();
 
     // Poll room list every 5 seconds when in lobby
     const interval = setInterval(() => {
       if (!activeRoom) {
         fetchRooms();
+        fetchEvents();
       }
     }, 5000);
 
@@ -419,6 +436,54 @@ function App() {
     const roomId = generateId().slice(0, 8);
     const accessTicket = password ? await requestRoomAccess(roomId, password, true) : undefined;
     setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId, backgroundId, accessTicket });
+  };
+
+  const handleCreateEvent = async (event: {
+    title: string;
+    description: string;
+    startsAt: number;
+    duration: number;
+    trackId: string;
+    voiceTrackId?: string;
+    backgroundId: string;
+  }) => {
+    const response = await fetch(`${API_BASE}/events`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(event),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t.eventCreateError);
+    await fetchEvents();
+  };
+
+  const handleEventAttendance = async (eventId: string, attending: boolean) => {
+    const response = await fetch(`${API_BASE}/events/${eventId}/attendance`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ attending }),
+    });
+    if (!response.ok) throw new Error(t.eventAttendanceError);
+    setEvents((current) => current.map((event) => event.id === eventId ? {
+      ...event,
+      isAttending: attending,
+      attendeeCount: Math.max(0, event.attendeeCount + (attending ? 1 : -1)),
+    } : event));
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    const response = await fetch(`${API_BASE}/events/${eventId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(t.eventDeleteError);
+    setEvents((current) => current.filter((event) => event.id !== eventId));
   };
 
   const handleLeaveRoom = () => {
@@ -855,11 +920,31 @@ function App() {
           <AboutPage language={lang} onBack={() => setShowAbout(false)} />
         ) : (
           <>
+            <section className="glass-panel welcome-panel">
+              <div>
+                <h1>{t.welcomeTitle}</h1>
+                <p>{t.welcomeDesc}</p>
+              </div>
+              <div className="user-badge">
+                <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+                <span>{username}</span>
+              </div>
+            </section>
+            <EventPlanner
+              events={events}
+              tracks={tracks}
+              backgrounds={backgrounds}
+              username={username}
+              onCreate={handleCreateEvent}
+              onAttendance={handleEventAttendance}
+              onDelete={handleDeleteEvent}
+              onEnter={handleJoinRoom}
+              t={t}
+            />
             <RoomList
               rooms={rooms}
               tracks={tracks}
               backgrounds={backgrounds}
-              username={username}
               onJoinRoom={handleJoinRoom}
               onCreateRoom={handleCreateRoom}
               requestedRoomId={requestedRoomId}

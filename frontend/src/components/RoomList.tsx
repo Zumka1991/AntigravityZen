@@ -34,7 +34,6 @@ interface RoomListProps {
   rooms: RoomInfo[];
   tracks: Track[];
   backgrounds: MeditationBackground[];
-  username: string;
   onJoinRoom: (roomId: string, password?: string) => Promise<void>;
   onCreateRoom: (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string, password?: string) => Promise<void>;
   requestedRoomId?: string | null;
@@ -46,7 +45,6 @@ export const RoomList: React.FC<RoomListProps> = ({
   rooms,
   tracks,
   backgrounds,
-  username,
   onJoinRoom,
   onCreateRoom,
   requestedRoomId,
@@ -196,20 +194,6 @@ export const RoomList: React.FC<RoomListProps> = ({
 
   return (
     <div className="lobby-page">
-      {/* Welcome / Username Banner */}
-      <section className="glass-panel welcome-panel">
-        <div>
-          <h1>{t.welcomeTitle}</h1>
-          <p>{t.welcomeDesc}</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div className="user-badge">
-            <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-            <span>{username}</span>
-          </div>
-        </div>
-      </section>
-
       {/* Title & Actions */}
       <div className="section-heading">
         <div>

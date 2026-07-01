@@ -10,7 +10,7 @@ interface Message {
 }
 
 interface MeditationRoomProps {
-  roomState: RoomInfo & { clients: { id: string; username: string; isHost: boolean }[]; status: string; duration: number; startedAt: number; serverTime: number };
+  roomState: RoomInfo & { clients: { id: string; username: string; isHost: boolean }[]; status: string; duration: number; startedAt: number; serverTime: number; hostPresent: boolean };
   clientId: string;
   username: string;
   tracks: Track[];
@@ -1226,7 +1226,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             ) : (
               <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '1rem' }}>
-                  {t.participantWaitPrompt}
+                  {roomState.hostPresent ? t.participantWaitPrompt : t.hostAbsentPrompt}
                 </p>
                 <div style={{ display: 'flex', gap: '0.25rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', animation: 'pulseLight 1s infinite alternate' }} />

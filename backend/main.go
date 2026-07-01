@@ -58,6 +58,10 @@ func main() {
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))
 	r.POST("/api/rooms/access", handlers.RoomAccessHandler(hub, authManager))
+	r.GET("/api/events", handlers.GetMeditationEventsHandler(hub, authManager))
+	r.POST("/api/events", handlers.CreateMeditationEventHandler(authManager))
+	r.POST("/api/events/:id/attendance", handlers.SetMeditationEventAttendanceHandler(authManager))
+	r.DELETE("/api/events/:id", handlers.DeleteMeditationEventHandler(authManager))
 
 	r.GET("/api/tracks", handlers.GetTracksHandler(authManager))
 	r.POST("/api/tracks", handlers.AddTrackHandler(authManager))

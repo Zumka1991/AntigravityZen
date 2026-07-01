@@ -32,6 +32,10 @@ func WSHandler(hub *room.Hub, authManager *room.AuthManager) gin.HandlerFunc {
 			c.String(http.StatusUnauthorized, "Unauthorized session")
 			return
 		}
+		if err := hub.PrepareScheduledRoom(roomID); err != nil {
+			c.String(http.StatusInternalServerError, "Could not prepare scheduled room")
+			return
+		}
 		if !hub.ValidateRoomAccess(roomID, accessTicket, username, clientID) {
 			c.String(http.StatusForbidden, "Room password required")
 			return

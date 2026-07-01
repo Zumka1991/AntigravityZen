@@ -94,6 +94,29 @@ func InitDB(dbPath string) *sql.DB {
 		`CREATE INDEX IF NOT EXISTS idx_room_members_lookup
 			ON room_members(room_id, username, client_id
 		);`,
+		`CREATE TABLE IF NOT EXISTS meditation_events (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			host_username TEXT NOT NULL,
+			room_id TEXT NOT NULL UNIQUE,
+			starts_at INTEGER NOT NULL,
+			duration INTEGER NOT NULL,
+			track_id TEXT,
+			voice_track_id TEXT,
+			background_id TEXT,
+			created_at INTEGER NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_meditation_events_starts_at
+			ON meditation_events(starts_at
+		);`,
+		`CREATE TABLE IF NOT EXISTS meditation_event_attendees (
+			event_id TEXT NOT NULL,
+			username TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			PRIMARY KEY (event_id, username),
+			FOREIGN KEY (event_id) REFERENCES meditation_events(id) ON DELETE CASCADE
+		);`,
 	}
 
 	for _, query := range queries {

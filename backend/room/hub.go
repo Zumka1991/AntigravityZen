@@ -53,6 +53,7 @@ type RoomState struct {
 	Duration    int                   `json:"duration,omitempty"`  // selected duration in seconds
 	StartedAt   int64                 `json:"startedAt,omitempty"` // Unix timestamp in ms
 	ServerTime  int64                 `json:"serverTime"`          // current server Unix timestamp in ms
+	HostPresent bool                  `json:"hostPresent"`
 }
 
 type User struct {
@@ -175,7 +176,8 @@ func (h *Hub) Run() {
 			room.EmptySince = 0
 			// The same authenticated account may reclaim host control after
 			// reopening a tab or reconnecting after a server restart.
-			if room.HostID == "" || (room.HostUsername != "" && strings.EqualFold(room.HostUsername, client.Username)) {
+			if (room.HostID == "" && room.HostUsername == "") ||
+				(room.HostUsername != "" && strings.EqualFold(room.HostUsername, client.Username)) {
 				room.HostID = client.ID
 				room.HostUsername = client.Username
 			}
@@ -266,6 +268,13 @@ func (h *Hub) BroadcastRoomState(roomID string) {
 		Duration:    room.Duration,
 		StartedAt:   room.StartedAt,
 		ServerTime:  time.Now().UnixNano() / int64(time.Millisecond),
+		HostPresent: false,
+	}
+	for c := range room.Clients {
+		if strings.EqualFold(c.Username, room.HostUsername) {
+			state.HostPresent = true
+			break
+		}
 	}
 
 	stateBytes, err := json.Marshal(state)
