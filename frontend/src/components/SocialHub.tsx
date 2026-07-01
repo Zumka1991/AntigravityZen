@@ -311,7 +311,7 @@ export function SocialHub({
           </div>
         </div>
       ) : (
-        <div className="glass-panel messenger">
+        <div className={`glass-panel messenger ${activeDialog ? 'dialog-open' : ''}`}>
           <aside className="conversation-list">
             <h2>{ru ? 'Диалоги' : 'Conversations'}</h2>
             {conversations.map((conversation) => (
@@ -339,6 +339,14 @@ export function SocialHub({
             {activeDialog ? (
               <>
                 <div className="dialog-header">
+                  <button
+                    type="button"
+                    className="mobile-dialog-back"
+                    onClick={() => setActiveDialog(null)}
+                    aria-label={ru ? 'Вернуться к диалогам' : 'Back to conversations'}
+                  >
+                    ←
+                  </button>
                   <span className="user-avatar">{activeDialog.charAt(0).toUpperCase()}</span>
                   <div><strong>{activeDialog}</strong><small>{ru ? 'личный диалог' : 'direct conversation'}</small></div>
                 </div>

@@ -795,6 +795,10 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.mobile-dialog-back {
+  display: none;
+}
+
 .dialog-header > div {
   display: flex;
   flex-direction: column;
@@ -871,10 +875,38 @@
   }
 
   .conversation-list {
-    max-height: 230px;
-    overflow-y: auto;
     border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 0;
+  }
+
+  .messenger:not(.dialog-open) .dialog {
+    display: none;
+  }
+
+  .messenger.dialog-open .conversation-list {
+    display: none;
+  }
+
+  .messenger.dialog-open .dialog {
+    min-height: min(620px, calc(100dvh - 190px));
+  }
+
+  .mobile-dialog-back {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 1.1rem;
+    cursor: pointer;
+  }
+
+  .dialog-messages {
+    max-height: none;
   }
 
   .profile-stats {
