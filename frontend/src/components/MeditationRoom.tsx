@@ -1123,6 +1123,15 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
               </button>
             )}
           </div>
+        ) : roomState.status === 'finished' ? (
+          /* Finished Screen */
+          <div className="meditation-start-screen finished-screen">
+            <div className="brand-icon" style={{ width: '64px', height: '64px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }} />
+            <h2>{t.meditationFinishedTitle}</h2>
+            <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', fontSize: '0.95rem', margin: '1.5rem 0', maxWidth: '360px', lineHeight: '1.6' }}>
+              {t.meditationFinishedDescription}
+            </p>
+          </div>
         ) : (
           /* Lobby / Meditation Config Screen */
           <div className="meditation-start-screen">
