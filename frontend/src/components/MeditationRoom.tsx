@@ -83,6 +83,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const hasPlayedFinishedSoundRef = useRef(false);
 
   // Microphone streaming & recording state (Host)
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
@@ -608,6 +609,21 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       audioRef.current.volume = effectiveMusicVolume;
     }
   }, [effectiveMusicVolume]);
+
+  useEffect(() => {
+    if (roomState.status === 'finished') {
+      if (!hasPlayedFinishedSoundRef.current) {
+        hasPlayedFinishedSoundRef.current = true;
+        const sound = new Audio('/meditation_completed.mp3');
+        sound.volume = 1.0;
+        sound.play().catch((err) => {
+          console.warn('[Sound] Could not play finished audio:', err);
+        });
+      }
+    } else {
+      hasPlayedFinishedSoundRef.current = false;
+    }
+  }, [roomState.status]);
 
   // Configurable states for host before starting
   const ambientTracks = tracks.filter(tr => !tr.ownerUsername || tr.isPublic);
