@@ -8,8 +8,10 @@ import { BackgroundManager } from './components/BackgroundManager';
 import { AboutPage } from './components/AboutPage';
 import { EventPlanner } from './components/EventPlanner';
 import type { MeditationEvent } from './components/EventPlanner';
+import { SocialHub } from './components/SocialHub';
 import { translations } from './translations';
 import type { Language } from './translations';
+import './App.css';
 
 // Generate UUID-like string
 const generateId = () => {
@@ -61,6 +63,10 @@ function App() {
   // Shared sound library states
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showSocial, setShowSocial] = useState(false);
+  const [socialTab, setSocialTab] = useState<'profiles' | 'messages'>('profiles');
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [trackTitle, setTrackTitle] = useState('');
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
@@ -79,6 +85,19 @@ function App() {
   };
 
   const t = translations[lang];
+
+  const openAboutPage = () => {
+    setShowSocial(false);
+    setShowAbout(true);
+    setMobileMenuOpen(false);
+  };
+
+  const openSocialPage = (tab: 'profiles' | 'messages') => {
+    setShowAbout(false);
+    setSocialTab(tab);
+    setShowSocial(true);
+    setMobileMenuOpen(false);
+  };
 
   const [clientId] = useState(() => {
     let id = sessionStorage.getItem('zen_client_id');
@@ -299,6 +318,29 @@ function App() {
 
     return () => clearInterval(interval);
   }, [activeRoom, token]);
+
+  useEffect(() => {
+    if (!token || isGuest) {
+      setUnreadMessages(0);
+      return;
+    }
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/notifications`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUnreadMessages(data.unreadCount || 0);
+        }
+      } catch (err) {
+        console.error('Failed to load message notifications:', err);
+      }
+    };
+    void loadNotifications();
+    const interval = window.setInterval(loadNotifications, 10000);
+    return () => window.clearInterval(interval);
+  }, [token, isGuest]);
 
   // Connect to websocket when in room
   useEffect(() => {
@@ -879,6 +921,8 @@ function App() {
           className="brand brand-button"
           onClick={() => {
             setShowAbout(false);
+            setShowSocial(false);
+            setMobileMenuOpen(false);
             handleLeaveRoom();
           }}
           aria-label="ZenWorld"
@@ -886,7 +930,7 @@ function App() {
           <div className="brand-icon" />
           <span>ZenWorld</span>
         </button>
-        <div className="header-actions">
+        <div className="header-actions desktop-header-actions">
           {/* Language Selector */}
           <div className="language-switcher" aria-label={lang === 'ru' ? 'Язык' : 'Language'}>
             <button 
@@ -905,16 +949,43 @@ function App() {
           {!activeRoom && token && (
             <button
               className={`btn btn-quiet ${showAbout ? 'active' : ''}`}
-              onClick={() => setShowAbout((value) => !value)}
+              onClick={() => {
+                if (showAbout) {
+                  setShowAbout(false);
+                } else {
+                  openAboutPage();
+                }
+              }}
             >
+              <span className="desktop-menu-icon" aria-hidden="true">✦</span>
               {lang === 'ru' ? 'О проекте' : 'About'}
             </button>
+          )}
+          {!activeRoom && token && !isGuest && (
+            <>
+              <button
+                className={`btn btn-quiet ${showSocial && socialTab === 'profiles' ? 'active' : ''}`}
+                onClick={() => openSocialPage('profiles')}
+              >
+                <span className="desktop-menu-icon" aria-hidden="true">◉</span>
+                {lang === 'ru' ? 'Профили' : 'Profiles'}
+              </button>
+              <button
+                className={`btn btn-quiet message-nav-button ${showSocial && socialTab === 'messages' ? 'active' : ''}`}
+                onClick={() => openSocialPage('messages')}
+              >
+                <span className="desktop-menu-icon" aria-hidden="true">✉</span>
+                {lang === 'ru' ? 'Сообщения' : 'Messages'}
+                {unreadMessages > 0 && <span className="notification-count">{unreadMessages}</span>}
+              </button>
+            </>
           )}
           {!activeRoom && token && !isGuest && (
             <button 
               className="btn btn-quiet"
               onClick={() => setShowAdminPanel(true)}
             >
+              <span className="desktop-menu-icon" aria-hidden="true">♫</span>
               {t.adminAccessBtn}
             </button>
           )}
@@ -936,6 +1007,7 @@ function App() {
                     setShowAuthModal(true);
                   }}
                 >
+                  <span className="desktop-menu-icon" aria-hidden="true">＋</span>
                   {t.createAccountBtn}
                 </button>
               ) : (
@@ -943,12 +1015,108 @@ function App() {
                   className="btn logout-button"
                   onClick={() => void handleLogout()}
                 >
+                  <span className="desktop-menu-icon" aria-hidden="true">↪</span>
                   {t.logoutBtn}
                 </button>
               )}
             </div>
           )}
         </div>
+        {!activeRoom && token && (
+          <div className="mobile-nav">
+            <button
+              type="button"
+              className={`mobile-menu-toggle ${mobileMenuOpen ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-main-menu"
+              aria-label={lang === 'ru' ? 'Открыть меню' : 'Open menu'}
+            >
+              <span />
+              <span />
+              <span />
+              {unreadMessages > 0 && !isGuest && <i>{unreadMessages}</i>}
+            </button>
+            {mobileMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="mobile-menu-backdrop"
+                  aria-label={lang === 'ru' ? 'Закрыть меню' : 'Close menu'}
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <div className="mobile-menu-panel" id="mobile-main-menu">
+                  <div className="mobile-menu-user">
+                    <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+                    <div>
+                      <strong>{username}</strong>
+                      <span>{isGuest ? t.guestLabel : (lang === 'ru' ? 'Профиль ZenWorld' : 'ZenWorld profile')}</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-menu-group">
+                    <span>{lang === 'ru' ? 'Навигация' : 'Navigation'}</span>
+                    <button type="button" onClick={openAboutPage}>
+                      <b>✦</b><span>{lang === 'ru' ? 'О проекте' : 'About'}</span>
+                    </button>
+                    {!isGuest && (
+                      <>
+                        <button type="button" onClick={() => openSocialPage('profiles')}>
+                          <b>◉</b><span>{lang === 'ru' ? 'Профили участников' : 'Member profiles'}</span>
+                        </button>
+                        <button type="button" onClick={() => openSocialPage('messages')}>
+                          <b>✉</b><span>{lang === 'ru' ? 'Личные сообщения' : 'Direct messages'}</span>
+                          {unreadMessages > 0 && <em>{unreadMessages}</em>}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mobile-menu-group">
+                    <span>{lang === 'ru' ? 'Настройки' : 'Settings'}</span>
+                    <div className="mobile-language-row">
+                      <b>文</b>
+                      <span>{lang === 'ru' ? 'Язык' : 'Language'}</span>
+                      <div className="language-switcher" aria-label={lang === 'ru' ? 'Язык' : 'Language'}>
+                        <button className={lang === 'ru' ? 'language-option active' : 'language-option'} onClick={() => handleSetLang('ru')}>RU</button>
+                        <button className={lang === 'en' ? 'language-option active' : 'language-option'} onClick={() => handleSetLang('en')}>EN</button>
+                      </div>
+                    </div>
+                    {!isGuest && (
+                      <button type="button" onClick={() => {
+                        setShowAdminPanel(true);
+                        setMobileMenuOpen(false);
+                      }}>
+                        <b>♫</b><span>{t.adminAccessBtn}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mobile-menu-group">
+                    <span>{lang === 'ru' ? 'Аккаунт' : 'Account'}</span>
+                    {isGuest ? (
+                      <button type="button" className="mobile-account-primary" onClick={() => {
+                        setShowLogin(false);
+                        setAuthError(null);
+                        setShowAuthModal(true);
+                        setMobileMenuOpen(false);
+                      }}>
+                        <b>＋</b><span>{t.createAccountBtn}</span>
+                      </button>
+                    ) : (
+                      <button type="button" className="mobile-logout" onClick={() => {
+                        setMobileMenuOpen(false);
+                        void handleLogout();
+                      }}>
+                        <b>↪</b><span>{t.logoutBtn}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </header>
 
       {connectionError && (
@@ -997,6 +1165,16 @@ function App() {
               </button>
             </div>
           )
+        ) : showSocial && !isGuest ? (
+          <SocialHub
+            apiBase={API_BASE}
+            token={token}
+            username={username}
+            language={lang}
+            initialTab={socialTab}
+            onBack={() => setShowSocial(false)}
+            onUnreadChange={setUnreadMessages}
+          />
         ) : showAbout ? (
           <AboutPage language={lang} onBack={() => setShowAbout(false)} />
         ) : (

@@ -56,6 +56,13 @@ func main() {
 	r.POST("/api/guest", handlers.GuestHandler(authManager))
 	r.POST("/api/verify", handlers.VerifyHandler(authManager))
 	r.POST("/api/logout", handlers.LogoutHandler(authManager))
+	r.GET("/api/profiles", handlers.ListProfilesHandler(authManager))
+	r.GET("/api/profiles/:username", handlers.GetProfileHandler(authManager))
+	r.POST("/api/profiles/:username/like", handlers.SetProfileLikeHandler(authManager))
+	r.GET("/api/messages", handlers.ListConversationsHandler(authManager))
+	r.GET("/api/messages/:username", handlers.ListDirectMessagesHandler(authManager))
+	r.POST("/api/messages/:username", handlers.SendDirectMessageHandler(authManager))
+	r.GET("/api/notifications", handlers.DirectMessageNotificationsHandler(authManager))
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))
 	r.POST("/api/rooms/access", handlers.RoomAccessHandler(hub, authManager))

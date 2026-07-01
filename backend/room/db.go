@@ -118,6 +118,36 @@ func InitDB(dbPath string) *sql.DB {
 			PRIMARY KEY (event_id, username),
 			FOREIGN KEY (event_id) REFERENCES meditation_events(id) ON DELETE CASCADE
 		);`,
+		`CREATE TABLE IF NOT EXISTS room_participations (
+			room_id TEXT NOT NULL,
+			username TEXT NOT NULL COLLATE NOCASE,
+			was_host INTEGER NOT NULL DEFAULT 0,
+			joined_at INTEGER NOT NULL,
+			PRIMARY KEY (room_id, username)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_room_participations_username
+			ON room_participations(username
+		);`,
+		`CREATE TABLE IF NOT EXISTS profile_likes (
+			profile_username TEXT NOT NULL COLLATE NOCASE,
+			liked_by TEXT NOT NULL COLLATE NOCASE,
+			created_at INTEGER NOT NULL,
+			PRIMARY KEY (profile_username, liked_by)
+		);`,
+		`CREATE TABLE IF NOT EXISTS direct_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sender_username TEXT NOT NULL COLLATE NOCASE,
+			recipient_username TEXT NOT NULL COLLATE NOCASE,
+			text TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			read_at INTEGER
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_dialog
+			ON direct_messages(sender_username, recipient_username, id
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_unread
+			ON direct_messages(recipient_username, read_at, id
+		);`,
 	}
 
 	for _, query := range queries {

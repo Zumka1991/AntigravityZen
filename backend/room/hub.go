@@ -190,6 +190,13 @@ func (h *Hub) Run() {
 			if err := SaveRoomMember(room.ID, client.Username, client.ID); err != nil {
 				log.Printf("Could not persist room membership for %s: %v", client.Username, err)
 			}
+			if err := RecordRoomParticipation(
+				room.ID,
+				client.Username,
+				strings.EqualFold(room.HostUsername, client.Username),
+			); err != nil {
+				log.Printf("Could not record room participation for %s: %v", client.Username, err)
+			}
 
 			// Broadcast updated room state
 			h.BroadcastRoomState(client.RoomID)
