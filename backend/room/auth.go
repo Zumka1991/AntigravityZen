@@ -33,12 +33,12 @@ func NewAuthManager(db *sql.DB) *AuthManager {
 
 const sessionLifetime = 30 * 24 * time.Hour
 
-func (am *AuthManager) createSession(username string) (string, error) {
+func (am *AuthManager) createSession(username string, isGuest bool) (string, error) {
 	token := generateToken()
 	expiresAt := time.Now().Add(sessionLifetime).Unix()
 	if _, err := am.db.Exec(
-		"INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)",
-		token, username, expiresAt,
+		"INSERT INTO sessions (token, username, expires_at, is_guest) VALUES (?, ?, ?, ?)",
+		token, username, expiresAt, isGuest,
 	); err != nil {
 		return "", err
 	}
@@ -50,6 +50,9 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return "", errors.New("username cannot be empty")
+	}
+	if strings.HasPrefix(strings.ToLower(username), "guest-") {
+		return "", errors.New("this username is reserved")
 	}
 	if len(password) < 4 {
 		return "", errors.New("password must be at least 4 characters long")
@@ -76,7 +79,7 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 		return "", err
 	}
 
-	return am.createSession(username)
+	return am.createSession(username, false)
 }
 
 // Login аутентифицирует пользователя и возвращает сессионный токен
@@ -102,27 +105,65 @@ func (am *AuthManager) Login(username, password string) (string, error) {
 		return "", errors.New("invalid username or password")
 	}
 
-	return am.createSession(dbUsername)
+	return am.createSession(dbUsername, false)
 }
 
-// ValidateToken проверяет валидность токена и возвращает имя пользователя
-func (am *AuthManager) ValidateToken(token string) (string, bool) {
+// CreateGuest creates a durable anonymous session with a collision-resistant nickname.
+func (am *AuthManager) CreateGuest() (string, string, error) {
+	for attempt := 0; attempt < 10; attempt++ {
+		suffixBytes := make([]byte, 3)
+		if _, err := rand.Read(suffixBytes); err != nil {
+			return "", "", err
+		}
+		username := "Guest-" + strings.ToUpper(hex.EncodeToString(suffixBytes))
+
+		var exists bool
+		err := am.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM users WHERE LOWER(username) = LOWER(?)
+				UNION ALL
+				SELECT 1 FROM sessions
+				WHERE LOWER(username) = LOWER(?) AND expires_at > ?
+			)
+		`, username, username, time.Now().Unix()).Scan(&exists)
+		if err != nil {
+			return "", "", err
+		}
+		if exists {
+			continue
+		}
+
+		token, err := am.createSession(username, true)
+		return username, token, err
+	}
+	return "", "", errors.New("could not create unique guest")
+}
+
+// ValidateSession returns the identity and whether it belongs to a guest.
+func (am *AuthManager) ValidateSession(token string) (string, bool, bool) {
 	if token == "" {
-		return "", false
+		return "", false, false
 	}
 	var username string
 	var expiresAt int64
+	var isGuest bool
 	err := am.db.QueryRow(
-		"SELECT username, expires_at FROM sessions WHERE token = ?",
+		"SELECT username, expires_at, is_guest FROM sessions WHERE token = ?",
 		token,
-	).Scan(&username, &expiresAt)
+	).Scan(&username, &expiresAt, &isGuest)
 	if err != nil || expiresAt <= time.Now().Unix() {
 		if err == nil {
 			_, _ = am.db.Exec("DELETE FROM sessions WHERE token = ?", token)
 		}
-		return "", false
+		return "", false, false
 	}
-	return username, true
+	return username, isGuest, true
+}
+
+// ValidateToken проверяет валидность токена и возвращает имя пользователя
+func (am *AuthManager) ValidateToken(token string) (string, bool) {
+	username, _, valid := am.ValidateSession(token)
+	return username, valid
 }
 
 // Logout удаляет активную сессию

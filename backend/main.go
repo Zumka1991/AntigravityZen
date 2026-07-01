@@ -53,6 +53,7 @@ func main() {
 	// API Routes
 	r.POST("/api/register", handlers.RegisterHandler(authManager))
 	r.POST("/api/login", handlers.LoginHandler(authManager))
+	r.POST("/api/guest", handlers.GuestHandler(authManager))
 	r.POST("/api/verify", handlers.VerifyHandler(authManager))
 	r.POST("/api/logout", handlers.LogoutHandler(authManager))
 

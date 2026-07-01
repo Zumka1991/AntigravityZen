@@ -1807,6 +1807,41 @@ label {
   margin-top: 1.4rem;
 }
 
+.auth-guest-retry {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.auth-modal-card {
+  max-height: min(92dvh, 720px);
+  overflow-y: auto;
+}
+
+.auth-modal-card .auth-intro h2 {
+  margin: 0.35rem 0 0.45rem;
+  font-size: clamp(1.65rem, 5vw, 2rem);
+}
+
+.auth-stay-guest {
+  display: block;
+  margin: 0.8rem auto 0;
+  color: var(--color-text-secondary);
+}
+
+.guest-label {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.guest-register-button {
+  min-height: 34px;
+  padding: 0.48rem 0.7rem;
+  font-size: 0.72rem;
+}
+
 .app-loading,
 .loading-state {
   min-height: 100dvh;

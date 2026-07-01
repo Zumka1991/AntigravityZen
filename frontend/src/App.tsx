@@ -48,10 +48,12 @@ const restoreActiveRoom = (): ActiveRoom | null => {
 function App() {
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState('');
+  const [isGuest, setIsGuest] = useState(false);
   const [isCheckingToken, setIsCheckingToken] = useState(true);
   
   // Auth Form States
   const [showLogin, setShowLogin] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -114,11 +116,29 @@ function App() {
     };
   };
 
-  // Verify token on mount
+  const startGuestSession = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/guest`, { method: 'POST' });
+      if (!response.ok) throw new Error('Guest session failed');
+      const data = await response.json();
+      localStorage.setItem('zen_token', data.token);
+      localStorage.setItem('zen_username', data.username);
+      localStorage.setItem('zen_is_guest', 'true');
+      setToken(data.token);
+      setUsername(data.username);
+      setIsGuest(true);
+      return true;
+    } catch (err) {
+      console.error('Failed to start guest session:', err);
+      return false;
+    }
+  };
+
+  // Verify a durable session or quietly start a guest session.
   useEffect(() => {
     const savedToken = localStorage.getItem('zen_token');
     if (!savedToken) {
-      setIsCheckingToken(false);
+      void startGuestSession().finally(() => setIsCheckingToken(false));
       return;
     }
 
@@ -134,13 +154,19 @@ function App() {
           if (data.valid) {
             setToken(savedToken);
             setUsername(data.username);
+            setIsGuest(Boolean(data.isGuest));
+            localStorage.setItem('zen_is_guest', String(Boolean(data.isGuest)));
           } else {
             localStorage.removeItem('zen_token');
             localStorage.removeItem('zen_username');
+            localStorage.removeItem('zen_is_guest');
+            await startGuestSession();
           }
         } else {
           localStorage.removeItem('zen_token');
           localStorage.removeItem('zen_username');
+          localStorage.removeItem('zen_is_guest');
+          await startGuestSession();
         }
       } catch (err) {
         console.error('Failed to verify token:', err);
@@ -150,6 +176,7 @@ function App() {
         if (savedUsername) {
           setToken(savedToken);
           setUsername(savedUsername);
+          setIsGuest(localStorage.getItem('zen_is_guest') === 'true');
         }
       } finally {
         setIsCheckingToken(false);
@@ -536,6 +563,8 @@ function App() {
         if (data.error) {
           if (data.error.includes('taken')) {
             errorMsg = t.authErrorTaken;
+          } else if (data.error.includes('reserved')) {
+            errorMsg = t.authErrorReserved;
           } else if (data.error.includes('password must be')) {
             errorMsg = t.authErrorPasswordShort;
           } else {
@@ -548,8 +577,11 @@ function App() {
 
       localStorage.setItem('zen_token', data.token);
       localStorage.setItem('zen_username', data.username);
+      localStorage.setItem('zen_is_guest', 'false');
       setUsername(data.username);
       setToken(data.token);
+      setIsGuest(false);
+      setShowAuthModal(false);
       setAuthPassword('');
       setAuthError(null);
     } catch (err) {
@@ -558,25 +590,28 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     leavingRoomRef.current = true;
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'leave', payload: {} }));
       wsRef.current.close();
     }
     if (token) {
-      void fetch(`${API_BASE}/logout`, {
+      await fetch(`${API_BASE}/logout`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
       }).catch((err) => console.error('Logout request failed:', err));
     }
     localStorage.removeItem('zen_token');
     localStorage.removeItem('zen_username');
+    localStorage.removeItem('zen_is_guest');
     setToken(null);
     setUsername('');
+    setIsGuest(false);
     setAuthUsername('');
     setAuthPassword('');
     setActiveRoom(null);
+    await startGuestSession();
   };
 
   // Shared sound library operations
@@ -795,6 +830,13 @@ function App() {
               {showLogin ? t.signUpBtn : t.signInBtn}
             </button>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary auth-guest-retry"
+            onClick={() => void startGuestSession()}
+          >
+            {t.continueAsGuest}
+          </button>
         </div>
         
         {/* Language Selector at the bottom of login */}
@@ -859,7 +901,7 @@ function App() {
               {lang === 'ru' ? 'О проекте' : 'About'}
             </button>
           )}
-          {!activeRoom && token && (
+          {!activeRoom && token && !isGuest && (
             <button 
               className="btn btn-quiet"
               onClick={() => setShowAdminPanel(true)}
@@ -871,14 +913,30 @@ function App() {
             <div className="user-badge" style={{ gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-                <span>{username}</span>
+                <span>
+                  {username}
+                  {isGuest && <small className="guest-label">{t.guestLabel}</small>}
+                </span>
               </div>
-              <button 
-                className="btn logout-button"
-                onClick={handleLogout}
-              >
-                {t.logoutBtn}
-              </button>
+              {isGuest ? (
+                <button
+                  className="btn btn-primary guest-register-button"
+                  onClick={() => {
+                    setShowLogin(false);
+                    setAuthError(null);
+                    setShowAuthModal(true);
+                  }}
+                >
+                  {t.createAccountBtn}
+                </button>
+              ) : (
+                <button
+                  className="btn logout-button"
+                  onClick={() => void handleLogout()}
+                >
+                  {t.logoutBtn}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -982,6 +1040,71 @@ function App() {
           </>
         )}
       </main>
+
+      {showAuthModal && (
+        <div className="modal-overlay auth-modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="glass-panel auth-card auth-modal-card" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowAuthModal(false)} aria-label={t.closeAuth}>
+              &times;
+            </button>
+            <div className="auth-intro">
+              <span className="eyebrow">{t.guestAccountEyebrow}</span>
+              <h2>{showLogin ? t.loginTitle : t.registerTitle}</h2>
+              <p>{showLogin ? t.loginBenefit : t.registrationBenefit}</p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="auth-form">
+              <div className="form-group">
+                <label htmlFor="modal-auth-username">{t.usernameLabel}</label>
+                <input
+                  id="modal-auth-username"
+                  type="text"
+                  placeholder={t.usernamePlaceholder}
+                  value={authUsername}
+                  onChange={(event) => setAuthUsername(event.target.value)}
+                  required
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="modal-auth-password">{t.passwordLabel}</label>
+                <input
+                  id="modal-auth-password"
+                  type="password"
+                  placeholder={t.passwordPlaceholder}
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  required
+                  autoComplete={showLogin ? 'current-password' : 'new-password'}
+                />
+              </div>
+              {authError && <div className="notice notice-error" role="alert">{authError}</div>}
+              <button type="submit" className="btn btn-primary auth-submit">
+                {showLogin ? t.signInBtn : t.signUpBtn}
+              </button>
+            </form>
+
+            <div className="auth-switch">
+              <span>{showLogin ? t.noAccountPrompt : t.haveAccountPrompt} </span>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => {
+                  setShowLogin(!showLogin);
+                  setAuthError(null);
+                  setAuthPassword('');
+                }}
+              >
+                {showLogin ? t.signUpBtn : t.signInBtn}
+              </button>
+            </div>
+            <button className="text-button auth-stay-guest" type="button" onClick={() => setShowAuthModal(false)}>
+              {t.stayAsGuest}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Admin Panel Modal Overlay */}
       {showAdminPanel && (

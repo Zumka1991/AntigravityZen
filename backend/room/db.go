@@ -33,7 +33,8 @@ func InitDB(dbPath string) *sql.DB {
 		`CREATE TABLE IF NOT EXISTS sessions (
 			token TEXT PRIMARY KEY,
 			username TEXT NOT NULL,
-			expires_at INTEGER NOT NULL
+			expires_at INTEGER NOT NULL,
+			is_guest INTEGER NOT NULL DEFAULT 0
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
 			ON sessions(expires_at
@@ -144,6 +145,16 @@ func InitDB(dbPath string) *sql.DB {
 			log.Printf("Error adding is_public column to tracks table: %v", err)
 		} else {
 			log.Println("Added is_public column to tracks table successfully")
+		}
+	}
+
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('sessions') WHERE name='is_guest')").Scan(&colExists)
+	if err == nil && !colExists {
+		_, err = db.Exec("ALTER TABLE sessions ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0")
+		if err != nil {
+			log.Printf("Error adding is_guest column to sessions table: %v", err)
+		} else {
+			log.Println("Added is_guest column to sessions table successfully")
 		}
 	}
 

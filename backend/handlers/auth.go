@@ -3,11 +3,49 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"meditation-app/room"
 
 	"github.com/gin-gonic/gin"
 )
+
+const guestCookieName = "zen_guest_session"
+
+func setGuestCookie(c *gin.Context, token string, maxAge int) {
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(guestCookieName, token, maxAge, "/", "", secure, true)
+}
+
+// GuestHandler creates an anonymous session so the application is usable before registration.
+func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if savedToken, err := c.Cookie(guestCookieName); err == nil {
+			if username, isGuest, valid := authManager.ValidateSession(savedToken); valid && isGuest {
+				setGuestCookie(c, savedToken, int((30*24*time.Hour)/time.Second))
+				c.JSON(http.StatusOK, gin.H{
+					"username": username,
+					"token":    savedToken,
+					"isGuest":  true,
+				})
+				return
+			}
+		}
+
+		username, token, err := authManager.CreateGuest()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not start guest session"})
+			return
+		}
+		setGuestCookie(c, token, int((30*24*time.Hour)/time.Second))
+		c.JSON(http.StatusCreated, gin.H{
+			"username": username,
+			"token":    token,
+			"isGuest":  true,
+		})
+	}
+}
 
 // RegisterHandler handles POST /api/register
 func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
@@ -26,10 +64,12 @@ func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		setGuestCookie(c, "", -1)
 
 		c.JSON(http.StatusOK, gin.H{
 			"username": strings.TrimSpace(payload.Username),
 			"token":    token,
+			"isGuest":  false,
 		})
 	}
 }
@@ -51,11 +91,13 @@ func LoginHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
+		setGuestCookie(c, "", -1)
 
 		username, _ := authManager.ValidateToken(token)
 		c.JSON(http.StatusOK, gin.H{
 			"username": username,
 			"token":    token,
+			"isGuest":  false,
 		})
 	}
 }
@@ -71,7 +113,7 @@ func VerifyHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			return
 		}
 
-		username, valid := authManager.ValidateToken(payload.Token)
+		username, isGuest, valid := authManager.ValidateSession(payload.Token)
 		if !valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"valid": false})
 			return
@@ -80,6 +122,7 @@ func VerifyHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"valid":    true,
 			"username": username,
+			"isGuest":  isGuest,
 		})
 	}
 }
@@ -89,6 +132,7 @@ func LogoutHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
 		authManager.Logout(token)
+		setGuestCookie(c, "", -1)
 		c.JSON(http.StatusOK, gin.H{"status": "logged_out"})
 	}
 }
