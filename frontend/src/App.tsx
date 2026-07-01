@@ -271,6 +271,29 @@ function App() {
     }
   }, [activeRoom]);
 
+  useEffect(() => {
+    let pageTitle = '';
+    const isRu = lang === 'ru';
+
+    if (activeRoom) {
+      pageTitle = `${activeRoom.name} | ZenWorld`;
+    } else if (showAbout) {
+      pageTitle = `${isRu ? 'О проекте' : 'About'} | ZenWorld`;
+    } else if (showSocial && socialTab === 'profiles') {
+      pageTitle = `${isRu ? 'Профили участников' : 'Member profiles'} | ZenWorld`;
+    } else if (showSocial && socialTab === 'messages') {
+      pageTitle = `${isRu ? 'Личные сообщения' : 'Direct messages'} | ZenWorld`;
+    } else if (showAdminPanel) {
+      pageTitle = `${t.adminAccessBtn} | ZenWorld`;
+    } else {
+      pageTitle = isRu 
+        ? 'ZenWorld — Онлайн-медитации в реальном времени и исцеление' 
+        : 'ZenWorld — Real-time Online Meditations & Healing';
+    }
+
+    document.title = pageTitle;
+  }, [activeRoom, showAbout, showSocial, socialTab, showAdminPanel, lang, t]);
+
   // Fetch initial tracks and rooms when logged in
   const fetchRooms = async () => {
     if (!token) return;
@@ -982,7 +1005,7 @@ function App() {
           aria-label="ZenWorld"
         >
           <div className="brand-icon" />
-          <span>ZenWorld</span>
+          <h1 style={{ fontSize: 'inherit', fontWeight: 'inherit', margin: 0, display: 'inline' }}>ZenWorld</h1>
         </button>
         <div className="header-actions desktop-header-actions">
           {/* Language Selector */}
