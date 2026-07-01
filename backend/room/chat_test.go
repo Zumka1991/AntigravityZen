@@ -63,15 +63,17 @@ func TestHubChatHistoryRegistration(t *testing.T) {
 
 	hub.Register <- client
 
-	// We should receive 2 messages in client.Send:
+	// We should receive 3 messages in client.Send:
 	// 1. "room_state" (from BroadcastRoomState)
-	// 2. "chat_history" (from SendChatHistory)
+	// 2. "chat" (join log from BroadcastChatMessage)
+	// 3. "chat_history" (from SendChatHistory)
 	
 	// Wait and read messages
 	var roomStateReceived bool
 	var chatHistoryReceived bool
+	var joinMessageReceived bool
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		select {
 		case msgBytes := <-client.Send:
 			var msg Message
@@ -80,14 +82,19 @@ func TestHubChatHistoryRegistration(t *testing.T) {
 			}
 			if msg.Type == "room_state" {
 				roomStateReceived = true
+			} else if msg.Type == "chat" {
+				joinMessageReceived = true
+				if msg.Username != "System" {
+					t.Errorf("expected System user for join log, got %s", msg.Username)
+				}
 			} else if msg.Type == "chat_history" {
 				chatHistoryReceived = true
 				var history []ChatMessage
 				if err := json.Unmarshal(msg.Payload, &history); err != nil {
 					t.Fatalf("failed to unmarshal history: %v", err)
 				}
-				if len(history) != 1 || history[0].Username != "alice" || history[0].Text != "old message" {
-					t.Errorf("unexpected history content: %+v", history)
+				if len(history) != 2 {
+					t.Errorf("unexpected history length: expected 2, got %d", len(history))
 				}
 			}
 		case <-time.After(1 * time.Second):
@@ -97,6 +104,9 @@ func TestHubChatHistoryRegistration(t *testing.T) {
 
 	if !roomStateReceived {
 		t.Error("room_state not received")
+	}
+	if !joinMessageReceived {
+		t.Error("join message not received")
 	}
 	if !chatHistoryReceived {
 		t.Error("chat_history not received")

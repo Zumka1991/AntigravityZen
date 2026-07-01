@@ -200,6 +200,7 @@ func (h *Hub) Run() {
 
 			// Broadcast updated room state
 			h.BroadcastRoomState(client.RoomID)
+			h.BroadcastChatMessage(client.RoomID, "System", fmt.Sprintf("%s вошел в комнату / joined the room", client.Username))
 			h.SendChatHistory(client)
 
 		case client := <-h.Unregister:
@@ -231,6 +232,7 @@ func (h *Hub) Run() {
 					log.Printf("Could not persist disconnected room %s: %v", room.ID, err)
 				}
 				h.BroadcastRoomState(client.RoomID)
+				h.BroadcastChatMessage(client.RoomID, "System", fmt.Sprintf("%s вышел из комнаты / left the room", client.Username))
 				if emptySince != 0 {
 					go h.scheduleEmptyRoomCleanup(client.RoomID, emptySince, emptyRoomGracePeriod)
 				}

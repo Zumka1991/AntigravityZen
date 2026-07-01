@@ -2,6 +2,7 @@ package room
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 )
@@ -266,6 +267,7 @@ func (h *Hub) removeClientPermanently(client *Client) {
 		log.Printf("Could not delete room membership for %s: %v", client.Username, err)
 	}
 	h.BroadcastRoomState(client.RoomID)
+	h.BroadcastChatMessage(client.RoomID, "System", fmt.Sprintf("%s вышел из комнаты / left the room", client.Username))
 }
 
 func (h *Hub) scheduleEmptyRoomCleanup(roomID string, emptySince int64, delay time.Duration) {
