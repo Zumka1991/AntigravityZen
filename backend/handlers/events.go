@@ -33,7 +33,8 @@ func GetMeditationEventsHandler(hub *room.Hub, authManager *room.AuthManager) gi
 			return
 		}
 		for index := range events {
-			events[index].HostPresent = hub.IsEventHostPresent(events[index].RoomID, events[index].HostUsername)
+			events[index].HostPresent, events[index].RoomStatus =
+				hub.EventRoomPresence(events[index].RoomID, events[index].HostUsername)
 		}
 		c.JSON(http.StatusOK, events)
 	}

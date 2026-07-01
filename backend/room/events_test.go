@@ -46,3 +46,28 @@ func TestCompletingRoomRemovesScheduledEvent(t *testing.T) {
 		t.Fatalf("expected attendee cleanup, got %d", attendeeCount)
 	}
 }
+
+func TestLateHostEventRemainsVisible(t *testing.T) {
+	db := InitDB(":memory:")
+	defer db.Close()
+
+	event := MeditationEvent{
+		ID:           "late-host-event",
+		Title:        "Short practice",
+		HostUsername: "alice",
+		RoomID:       "late-host-room",
+		StartsAt:     time.Now().Add(-10 * time.Minute).UnixMilli(),
+		Duration:     60,
+	}
+	if err := CreateMeditationEvent(event); err != nil {
+		t.Fatalf("create late event: %v", err)
+	}
+
+	events, err := ListMeditationEvents("alice")
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	if len(events) != 1 || events[0].ID != event.ID {
+		t.Fatalf("late host should still have a chance to start, got %+v", events)
+	}
+}

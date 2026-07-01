@@ -16,6 +16,7 @@ export interface MeditationEvent {
   attendeeCount: number;
   isAttending: boolean;
   hostPresent: boolean;
+  roomStatus?: string;
 }
 
 interface EventPlannerProps {
@@ -97,7 +98,7 @@ export function EventPlanner({
   }, []);
 
   const pageSize = 3;
-  const currentEvents = events.filter((event) => event.startsAt + event.duration * 1_000 > now);
+  const currentEvents = events;
   const pageCount = Math.max(1, Math.ceil(currentEvents.length / pageSize));
   const visibleEvents = currentEvents.slice(page * pageSize, (page + 1) * pageSize);
 
@@ -155,10 +156,12 @@ export function EventPlanner({
     }).format(timestamp);
 
   const getTiming = (event: MeditationEvent) => {
-    const end = event.startsAt + event.duration * 1_000;
-    if (now >= event.startsAt && now < end) return { live: true, label: t.eventStartingNow };
+    if (event.roomStatus === 'playing') return { live: true, label: t.meditationInProgress };
     const delta = event.startsAt - now;
-    if (delta <= 0) return { live: false, ended: true, label: t.eventEnded };
+    if (delta <= 0) return {
+      live: true,
+      label: event.hostPresent ? t.eventWaitingToStart : t.eventHostAbsent,
+    };
     const minutes = Math.ceil(delta / 60_000);
     if (minutes < 60) return { live: false, label: t.eventInMinutes.replace('{count}', String(minutes)) };
     const hours = Math.floor(minutes / 60);
@@ -245,8 +248,8 @@ export function EventPlanner({
                 </div>
                 <div className="event-main">
                   <div className="event-topline">
-                    <span className={`event-time-pill ${timing.live ? 'live' : ''} ${timing.live && !event.hostPresent ? 'host-absent' : ''}`}>
-                      {timing.live && <i />} {timing.live && !event.hostPresent ? t.eventHostAbsent : timing.label}
+                    <span className={`event-time-pill ${timing.live ? 'live' : ''} ${timing.live && !event.hostPresent && event.roomStatus !== 'playing' ? 'host-absent' : ''}`}>
+                      {timing.live && <i />} {timing.label}
                     </span>
                     {isHost && <span className="event-host-label">{t.youAreHost}</span>}
                   </div>
@@ -273,7 +276,7 @@ export function EventPlanner({
                     <button className="btn btn-event-live" onClick={() => onEnter(event.roomId)}>
                       {t.enterEventRoom} <span aria-hidden="true">→</span>
                     </button>
-                  ) : !timing.ended && !isHost ? (
+                  ) : !isHost ? (
                     <button
                       className={`btn ${event.isAttending ? 'btn-attending' : 'btn-secondary'}`}
                       disabled={pendingId === event.id}
@@ -282,7 +285,7 @@ export function EventPlanner({
                       {event.isAttending ? `✓ ${t.eventGoing}` : t.eventWillCome}
                     </button>
                   ) : null}
-                  {isHost && !timing.ended && (
+                  {isHost && (
                     <button
                       className="event-delete"
                       onClick={() => onDelete(event.id)}

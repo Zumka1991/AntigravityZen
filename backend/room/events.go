@@ -21,23 +21,24 @@ type MeditationEvent struct {
 	AttendeeCount int    `json:"attendeeCount"`
 	IsAttending   bool   `json:"isAttending"`
 	HostPresent   bool   `json:"hostPresent"`
+	RoomStatus    string `json:"roomStatus,omitempty"`
 }
 
-func (h *Hub) IsEventHostPresent(roomID, hostUsername string) bool {
+func (h *Hub) EventRoomPresence(roomID, hostUsername string) (bool, string) {
 	h.Mutex.RLock()
 	eventRoom, exists := h.Rooms[roomID]
 	h.Mutex.RUnlock()
 	if !exists {
-		return false
+		return false, ""
 	}
 	eventRoom.Mutex.RLock()
 	defer eventRoom.Mutex.RUnlock()
 	for client := range eventRoom.Clients {
 		if strings.EqualFold(client.Username, hostUsername) {
-			return true
+			return true, eventRoom.Status
 		}
 	}
-	return false
+	return false, eventRoom.Status
 }
 
 func CreateMeditationEvent(event MeditationEvent) error {
@@ -60,7 +61,10 @@ func ListMeditationEvents(username string) ([]MeditationEvent, error) {
 	if dbConn == nil {
 		return nil, errors.New("database is not initialized")
 	}
-	now := time.Now().UnixMilli()
+	// A missed start is not the same as a completed meditation. Keep it in the
+	// poster so the community can wait for a late host; prune only abandoned
+	// events after a generous grace period.
+	staleBefore := time.Now().Add(-24 * time.Hour).UnixMilli()
 	rows, err := dbConn.Query(`
 		SELECT e.id, e.title, e.description, e.host_username, e.room_id,
 		       e.starts_at, e.duration, COALESCE(e.track_id, ''),
@@ -72,10 +76,10 @@ func ListMeditationEvents(username string) ([]MeditationEvent, error) {
 		       )
 		FROM meditation_events e
 		LEFT JOIN meditation_event_attendees a ON a.event_id = e.id
-		WHERE e.starts_at + (e.duration * 1000) > ?
+		WHERE e.starts_at > ?
 		GROUP BY e.id
 		ORDER BY e.starts_at ASC
-	`, username, now)
+	`, username, staleBefore)
 	if err != nil {
 		return nil, err
 	}
