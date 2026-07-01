@@ -264,8 +264,10 @@ function App() {
   useEffect(() => {
     if (activeRoom) {
       sessionStorage.setItem('zen_active_room', JSON.stringify(activeRoom));
+      document.body.classList.add('in-room-body');
     } else {
       sessionStorage.removeItem('zen_active_room');
+      document.body.classList.remove('in-room-body');
     }
   }, [activeRoom]);
 

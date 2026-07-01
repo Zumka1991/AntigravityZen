@@ -36,6 +36,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body:not(.in-room-body) {
+  background-image: linear-gradient(rgba(8, 11, 20, 0.95), rgba(8, 11, 20, 0.95)), url("/zen_background.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
 h1, h2, h3, h4 {
   font-family: var(--font-heading);
   letter-spacing: -0.02em;
