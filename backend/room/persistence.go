@@ -331,6 +331,9 @@ func (h *Hub) scheduleRoomCompletion(roomID string, startedAt int64, duration in
 	if err := PersistRoom(room); err != nil {
 		log.Printf("Could not persist completed room %s: %v", roomID, err)
 	}
+	if err := CompleteMeditationEventByRoom(roomID); err != nil {
+		log.Printf("Could not complete scheduled event for room %s: %v", roomID, err)
+	}
 	h.BroadcastRoomState(roomID)
 	if hasVoice {
 		h.BroadcastVoiceEvent(roomID, "voice_stop", "")

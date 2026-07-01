@@ -268,7 +268,7 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 		}
 		// Stop voice recording first (before clearing VoiceStartedAt so duration is correct)
 		c.Hub.stopVoiceRecordingLocked(room)
-		room.Status = "lobby"
+		room.Status = "finished"
 		room.ActiveTrack = nil
 		room.VoiceTrack = nil
 		room.VoiceFilePath = ""
@@ -278,6 +278,9 @@ func (c *Client) handleIncomingMessage(rawMsg []byte) {
 
 		if err := PersistRoom(room); err != nil {
 			log.Printf("Could not persist stopped meditation in room %s: %v", room.ID, err)
+		}
+		if err := CompleteMeditationEventByRoom(room.ID); err != nil {
+			log.Printf("Could not complete scheduled event for room %s: %v", room.ID, err)
 		}
 		log.Printf("Meditation stopped in room %s", room.ID)
 		c.Hub.BroadcastRoomState(c.RoomID)

@@ -282,7 +282,7 @@ export function EventPlanner({
                       {event.isAttending ? `✓ ${t.eventGoing}` : t.eventWillCome}
                     </button>
                   ) : null}
-                  {isHost && !timing.live && !timing.ended && (
+                  {isHost && !timing.ended && (
                     <button
                       className="event-delete"
                       onClick={() => onDelete(event.id)}

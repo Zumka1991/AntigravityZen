@@ -120,15 +120,55 @@ func DeleteMeditationEvent(eventID, username string) (bool, error) {
 	if dbConn == nil {
 		return false, errors.New("database is not initialized")
 	}
-	result, err := dbConn.Exec(
-		"DELETE FROM meditation_events WHERE id = ? AND LOWER(host_username) = LOWER(?)",
-		eventID, username,
-	)
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var exists bool
+	if err := tx.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM meditation_events
+			WHERE id = ? AND LOWER(host_username) = LOWER(?)
+		)
+	`, eventID, username).Scan(&exists); err != nil || !exists {
+		return false, err
+	}
+	if _, err := tx.Exec("DELETE FROM meditation_event_attendees WHERE event_id = ?", eventID); err != nil {
+		return false, err
+	}
+	result, err := tx.Exec("DELETE FROM meditation_events WHERE id = ?", eventID)
 	if err != nil {
 		return false, err
 	}
 	affected, err := result.RowsAffected()
-	return affected > 0, err
+	if err != nil || affected == 0 {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+// CompleteMeditationEventByRoom removes a scheduled event from the upcoming
+// poster as soon as its actual room finishes, including an early host stop.
+func CompleteMeditationEventByRoom(roomID string) error {
+	if dbConn == nil || roomID == "" {
+		return nil
+	}
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`
+		DELETE FROM meditation_event_attendees
+		WHERE event_id IN (SELECT id FROM meditation_events WHERE room_id = ?)
+	`, roomID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM meditation_events WHERE room_id = ?", roomID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func FindMeditationEventByRoom(roomID string) (*MeditationEvent, error) {
