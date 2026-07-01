@@ -3485,8 +3485,13 @@ label {
   }
 
   .about-hero {
-    min-height: 580px;
-    align-items: end;
+    min-height: 0;
+    align-items: start;
+    padding: 2.5rem 1.5rem;
+  }
+
+  .about-orbit {
+    top: 38%;
   }
 
   .about-principles,
