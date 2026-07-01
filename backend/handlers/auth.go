@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -52,6 +55,41 @@ func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	}
 }
 
+type googleCaptchaResponse struct {
+	Success     bool     `json:"success"`
+	ChallengeTS string   `json:"challenge_ts"`
+	Hostname    string   `json:"hostname"`
+	ErrorCodes  []string `json:"error-codes"`
+}
+
+func verifyCaptcha(token string, clientIP string) bool {
+	if gin.Mode() == gin.TestMode {
+		return true
+	}
+
+	secret := os.Getenv("RECAPTCHA_SECRET")
+	if secret == "" {
+		secret = "6Lcgaz8tAAAAANo__7VcaXtcpbv9wedWd63SyodK"
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm("https://www.google.com/recaptcha/api/siteverify", url.Values{
+		"secret":   {secret},
+		"response": {token},
+		"remoteip": {clientIP},
+	})
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	var verifyResp googleCaptchaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&verifyResp); err != nil {
+		return false
+	}
+	return verifyResp.Success
+}
+
 // RegisterHandler handles POST /api/register
 func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -60,11 +98,17 @@ func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			return
 		}
 		var payload struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
+			Username     string `json:"username"`
+			Password     string `json:"password"`
+			CaptchaToken string `json:"captchaToken"`
 		}
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		if !verifyCaptcha(payload.CaptchaToken, c.ClientIP()) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid captcha. Please try again."})
 			return
 		}
 

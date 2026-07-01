@@ -59,6 +59,52 @@ function App() {
   const [authUsername, setAuthUsername] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCaptchaToken(null);
+  }, [showAuthModal, showLogin]);
+
+  useEffect(() => {
+    if (!showAuthModal || showLogin) return;
+
+    let checkInterval: number;
+
+    const renderCaptcha = () => {
+      const container = document.getElementById('recaptcha-register-container');
+      const grecaptcha = (window as any).grecaptcha;
+      if (container && grecaptcha && grecaptcha.render) {
+        clearInterval(checkInterval);
+        try {
+          container.innerHTML = '';
+          grecaptcha.render(container, {
+            sitekey: '6Lcgaz8tAAAAAJSyVEpG9b1qEGNcAkRoBQH1QJVE',
+            callback: (token: string) => {
+              setCaptchaToken(token);
+            },
+            'expired-callback': () => {
+              setCaptchaToken(null);
+            },
+            'error-callback': () => {
+              setCaptchaToken(null);
+            }
+          });
+        } catch (e) {
+          console.error('Error rendering reCAPTCHA:', e);
+        }
+      }
+    };
+
+    checkInterval = window.setInterval(renderCaptcha, 100);
+
+    return () => {
+      clearInterval(checkInterval);
+      const container = document.getElementById('recaptcha-register-container');
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
+  }, [showAuthModal, showLogin]);
 
   // Shared sound library states
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -605,7 +651,11 @@ function App() {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: authUsername, password: authPassword }),
+        body: JSON.stringify({
+          username: authUsername,
+          password: authPassword,
+          captchaToken: !showLogin ? captchaToken : undefined
+        }),
       });
 
       const data = await res.json();
@@ -1269,7 +1319,18 @@ function App() {
                 />
               </div>
               {authError && <div className="notice notice-error" role="alert">{authError}</div>}
-              <button type="submit" className="btn btn-primary auth-submit">
+
+              {!showLogin && (
+                <div className="form-group" style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem', marginBottom: '1rem' }}>
+                  <div id="recaptcha-register-container"></div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-primary auth-submit"
+                disabled={!showLogin && !captchaToken}
+              >
                 {showLogin ? t.signInBtn : t.signUpBtn}
               </button>
             </form>
