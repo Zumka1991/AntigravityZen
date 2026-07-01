@@ -1959,6 +1959,28 @@ label {
   padding: 1.15rem 1.25rem;
   overflow: hidden;
   border-radius: 20px;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.event-card:hover {
+  border-color: rgba(169, 153, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.event-card-open {
+  position: absolute;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  inset: 0;
+}
+
+.event-card-open:focus-visible {
+  border-radius: inherit;
+  outline: 2px solid var(--color-primary);
+  outline-offset: -3px;
 }
 
 .event-card::after {
@@ -2115,6 +2137,7 @@ label {
 
 .event-actions {
   position: relative;
+  z-index: 2;
   display: flex;
   min-width: 150px;
   align-items: flex-end;
@@ -2196,6 +2219,82 @@ label {
 
 .event-modal {
   max-width: 680px;
+}
+
+.event-detail {
+  max-width: 720px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.event-detail-cover {
+  height: 210px;
+  background-position: center;
+  background-size: cover;
+}
+
+.event-detail-content {
+  padding: clamp(1.4rem, 4vw, 2.2rem);
+}
+
+.event-detail-content > h2 {
+  margin-top: 0.35rem;
+  font-size: clamp(1.7rem, 4vw, 2.35rem);
+}
+
+.event-detail-description {
+  margin-top: 0.8rem;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.event-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.event-detail-grid > div {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.event-detail-grid dt {
+  margin-bottom: 0.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+}
+
+.event-detail-grid dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.event-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.event-invite-fallback {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+
+.event-invite-fallback input {
+  width: 100%;
+  font-size: 0.8rem;
 }
 
 .event-modal > form {
@@ -2357,6 +2456,23 @@ label {
 
   .event-modal-actions {
     flex-direction: column-reverse;
+  }
+
+  .event-detail-cover {
+    height: 150px;
+  }
+
+  .event-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .event-detail-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .event-detail-actions .btn {
+    width: 100%;
   }
 
   .event-track-actions {

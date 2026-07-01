@@ -36,6 +36,8 @@ interface EventPlannerProps {
   onAttendance: (eventId: string, attending: boolean) => Promise<void>;
   onDelete: (eventId: string) => Promise<void>;
   onEnter: (roomId: string) => Promise<void>;
+  requestedEventId?: string | null;
+  onRequestedEventHandled?: () => void;
   t: typeof translations.en;
 }
 
@@ -53,6 +55,8 @@ export function EventPlanner({
   onAttendance,
   onDelete,
   onEnter,
+  requestedEventId,
+  onRequestedEventHandled,
   t,
 }: EventPlannerProps) {
   const [now, setNow] = useState(Date.now());
@@ -72,6 +76,9 @@ export function EventPlanner({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [showInviteLink, setShowInviteLink] = useState(false);
   const [openSection, setOpenSection] = useState<'sound' | 'background' | 'voice' | null>('sound');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -101,10 +108,19 @@ export function EventPlanner({
   const currentEvents = events;
   const pageCount = Math.max(1, Math.ceil(currentEvents.length / pageSize));
   const visibleEvents = currentEvents.slice(page * pageSize, (page + 1) * pageSize);
+  const selectedEvent = events.find((event) => event.id === selectedEventId);
 
   useEffect(() => {
     setPage((current) => Math.min(current, pageCount - 1));
   }, [pageCount]);
+
+  useEffect(() => {
+    if (!requestedEventId) return;
+    const requestedEvent = events.find((event) => event.id === requestedEventId);
+    if (!requestedEvent) return;
+    setSelectedEventId(requestedEvent.id);
+    onRequestedEventHandled?.();
+  }, [requestedEventId, events, onRequestedEventHandled]);
 
   useEffect(() => {
     if (!trackId && ambientTracks[0]) setTrackId(ambientTracks[0].id);
@@ -205,6 +221,44 @@ export function EventPlanner({
     }
   };
 
+  const openEvent = (eventId: string) => {
+    setInviteCopied(false);
+    setShowInviteLink(false);
+    setSelectedEventId(eventId);
+  };
+
+  const closeEvent = () => {
+    setSelectedEventId(null);
+    setInviteCopied(false);
+    setShowInviteLink(false);
+  };
+
+  const copyEventInvite = async (event: MeditationEvent) => {
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?eventId=${encodeURIComponent(event.id)}`;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      setShowInviteLink(false);
+      window.setTimeout(() => setInviteCopied(false), 2_000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = inviteUrl;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand('copy');
+      textarea.remove();
+      if (copied) {
+        setInviteCopied(true);
+        setShowInviteLink(false);
+        window.setTimeout(() => setInviteCopied(false), 2_000);
+      } else {
+        setShowInviteLink(true);
+      }
+    }
+  };
+
   return (
     <section className="planner-section">
       <div className="section-heading planner-heading">
@@ -239,7 +293,14 @@ export function EventPlanner({
               <article
                 className={`glass-panel event-card ${timing.live ? 'is-live' : ''} ${index === 0 ? 'is-next' : ''}`}
                 key={event.id}
+                onClick={() => openEvent(event.id)}
               >
+                <button
+                  type="button"
+                  className="event-card-open"
+                  aria-label={t.openEventDetails.replace('{title}', event.title)}
+                  onClick={() => openEvent(event.id)}
+                />
                 <div className="event-date-block" title={t.eventTimezoneHint.replace('{zone}', timeZone)}>
                   <span>{new Intl.DateTimeFormat(t.eventLocale, { month: 'short' }).format(event.startsAt)}</span>
                   <strong>{new Date(event.startsAt).getDate()}</strong>
@@ -273,14 +334,20 @@ export function EventPlanner({
                     <span>{t.eventGoingCount}</span>
                   </div>
                   {timing.live ? (
-                    <button className="btn btn-event-live" onClick={() => onEnter(event.roomId)}>
+                    <button className="btn btn-event-live" onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      void onEnter(event.roomId);
+                    }}>
                       {t.enterEventRoom} <span aria-hidden="true">→</span>
                     </button>
                   ) : !isHost ? (
                     <button
                       className={`btn ${event.isAttending ? 'btn-attending' : 'btn-secondary'}`}
                       disabled={pendingId === event.id}
-                      onClick={() => toggleAttendance(event)}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        void toggleAttendance(event);
+                      }}
                     >
                       {event.isAttending ? `✓ ${t.eventGoing}` : t.eventWillCome}
                     </button>
@@ -288,7 +355,10 @@ export function EventPlanner({
                   {isHost && (
                     <button
                       className="event-delete"
-                      onClick={() => onDelete(event.id)}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        void onDelete(event.id);
+                      }}
                       aria-label={t.deleteEvent}
                       title={t.deleteEvent}
                     >×</button>
@@ -329,6 +399,88 @@ export function EventPlanner({
           )}
         </div>
       )}
+
+      {selectedEvent && (() => {
+        const timing = getTiming(selectedEvent);
+        const isHost = selectedEvent.hostUsername.toLowerCase() === username.toLowerCase();
+        const track = tracks.find((item) => item.id === selectedEvent.trackId);
+        const voiceTrack = tracks.find((item) => item.id === selectedEvent.voiceTrackId);
+        const background = backgrounds.find((item) => item.id === selectedEvent.backgroundId);
+        return (
+          <div className="modal-overlay event-detail-overlay" onClick={closeEvent}>
+            <article className="modal-content glass-panel event-detail" onClick={(clickEvent) => clickEvent.stopPropagation()}>
+              <button className="modal-close" onClick={closeEvent} aria-label={t.closeEventDetails}>&times;</button>
+              {background && (
+                <div
+                  className="event-detail-cover"
+                  style={{ backgroundImage: `linear-gradient(180deg, transparent, rgba(12, 14, 24, 0.82)), url("${background.imageUrl}")` }}
+                />
+              )}
+              <div className="event-detail-content">
+                <div className="event-topline">
+                  <span className={`event-time-pill ${timing.live ? 'live' : ''}`}>
+                    {timing.live && <i />} {timing.label}
+                  </span>
+                  {isHost && <span className="event-host-label">{t.youAreHost}</span>}
+                </div>
+                <span className="eyebrow">{t.eventDetailsEyebrow}</span>
+                <h2>{selectedEvent.title}</h2>
+                {selectedEvent.description && <p className="event-detail-description">{selectedEvent.description}</p>}
+
+                <dl className="event-detail-grid">
+                  <div>
+                    <dt>{t.eventDateTimeLabel}</dt>
+                    <dd>{formatDate(selectedEvent.startsAt)} · {timeZoneLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.eventHost}</dt>
+                    <dd>{selectedEvent.hostUsername}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.durationLabel}</dt>
+                    <dd>{formatDuration(selectedEvent.duration)}</dd>
+                  </div>
+                  <div>
+                    <dt>{t.eventAttendees}</dt>
+                    <dd>{selectedEvent.attendeeCount}</dd>
+                  </div>
+                  {track && <div><dt>{t.selectSoundscape}</dt><dd>♫ {track.title}</dd></div>}
+                  {voiceTrack && <div><dt>{t.eventVoiceTitle}</dt><dd>🎙 {voiceTrack.title}</dd></div>}
+                </dl>
+
+                <div className="event-detail-actions">
+                  <button className="btn btn-secondary" onClick={() => void copyEventInvite(selectedEvent)}>
+                    {inviteCopied ? `✓ ${t.eventInviteCopied}` : `↗ ${t.inviteToEvent}`}
+                  </button>
+                  {timing.live ? (
+                    <button className="btn btn-event-live" onClick={() => void onEnter(selectedEvent.roomId)}>
+                      {t.enterEventRoom} <span aria-hidden="true">→</span>
+                    </button>
+                  ) : !isHost ? (
+                    <button
+                      className={`btn ${selectedEvent.isAttending ? 'btn-attending' : 'btn-primary'}`}
+                      disabled={pendingId === selectedEvent.id}
+                      onClick={() => void toggleAttendance(selectedEvent)}
+                    >
+                      {selectedEvent.isAttending ? `✓ ${t.eventGoing}` : t.eventWillCome}
+                    </button>
+                  ) : null}
+                </div>
+                {showInviteLink && (
+                  <label className="event-invite-fallback">
+                    <span>{t.eventInviteCopyFallback}</span>
+                    <input
+                      readOnly
+                      value={`${window.location.origin}${window.location.pathname}?eventId=${encodeURIComponent(selectedEvent.id)}`}
+                      onFocus={(focusEvent) => focusEvent.currentTarget.select()}
+                    />
+                  </label>
+                )}
+              </div>
+            </article>
+          </div>
+        );
+      })()}
 
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>

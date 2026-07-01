@@ -95,6 +95,7 @@ function App() {
   const sharedTracks = tracks.filter((track) => !track.ownerUsername || track.isPublic);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [requestedRoomId, setRequestedRoomId] = useState<string | null>(null);
+  const [requestedEventId, setRequestedEventId] = useState<string | null>(null);
   
   // WebSocket and real-time state
   const [roomState, setRoomState] = useState<any>(null);
@@ -221,14 +222,27 @@ function App() {
     }
   };
 
-  // Check for roomId query param on startup to auto-join
+  const clearInvitationTarget = (param: 'roomId' | 'eventId') => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete(param);
+    const search = url.searchParams.toString();
+    window.history.replaceState(
+      {},
+      document.title,
+      `${url.pathname}${search ? `?${search}` : ''}${url.hash}`,
+    );
+  };
+
+  // Keep invitation targets in the URL and memory while the user signs in or registers.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomIdParam = params.get('roomId');
+    const eventIdParam = params.get('eventId');
     if (roomIdParam) {
       setRequestedRoomId(roomIdParam);
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
+    }
+    if (eventIdParam) {
+      setRequestedEventId(eventIdParam);
     }
   }, []);
 
@@ -939,6 +953,11 @@ function App() {
               onAttendance={handleEventAttendance}
               onDelete={handleDeleteEvent}
               onEnter={handleJoinRoom}
+              requestedEventId={requestedEventId}
+              onRequestedEventHandled={() => {
+                setRequestedEventId(null);
+                clearInvitationTarget('eventId');
+              }}
               t={t}
             />
             <RoomList
@@ -948,7 +967,10 @@ function App() {
               onJoinRoom={handleJoinRoom}
               onCreateRoom={handleCreateRoom}
               requestedRoomId={requestedRoomId}
-              onRequestedRoomHandled={() => setRequestedRoomId(null)}
+              onRequestedRoomHandled={() => {
+                setRequestedRoomId(null);
+                clearInvitationTarget('roomId');
+              }}
               t={t}
             />
             <GlobalChat
