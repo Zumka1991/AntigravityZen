@@ -2571,7 +2571,7 @@ label {
   .app-container.in-room .meditation-scroll-content {
     height: 100%;
     min-height: 0;
-    padding: 1rem 0.85rem calc(5.6rem + env(safe-area-inset-bottom));
+    padding: calc(1.75rem + env(safe-area-inset-top)) 0.85rem calc(5.6rem + env(safe-area-inset-bottom));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
