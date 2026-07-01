@@ -56,6 +56,9 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [breathScale, setBreathScale] = useState(1.0);
   const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'members' | 'chat' | null>(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const previousMessageCountRef = useRef(messages.length);
 
   // Audio Volume States
   const [musicVolume, setMusicVolume] = useState(0.55);
@@ -79,7 +82,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   };
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
 
   // Microphone streaming & recording state (Host)
   const [isMicrophoneActive, setIsMicrophoneActive] = useState(false);
@@ -664,8 +667,42 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
   // Auto-scroll chat to bottom
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (mobilePanel === 'chat' || window.innerWidth > 760) {
+      const container = chatMessagesRef.current;
+      container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    }
+
+    const previousCount = previousMessageCountRef.current;
+    if (messages.length > previousCount && mobilePanel !== 'chat') {
+      const incomingCount = messages
+        .slice(previousCount)
+        .filter((message) => message.username !== username)
+        .length;
+      if (incomingCount > 0) {
+        setUnreadMessages((current) => current + incomingCount);
+      }
+    }
+    previousMessageCountRef.current = messages.length;
+  }, [messages, mobilePanel, username]);
+
+  useEffect(() => {
+    if (mobilePanel === 'chat') {
+      setUnreadMessages(0);
+      window.setTimeout(() => {
+        const container = chatMessagesRef.current;
+        container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }, 180);
+    }
+  }, [mobilePanel]);
+
+  useEffect(() => {
+    if (!mobilePanel) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobilePanel(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobilePanel]);
 
   // Audio player synchronization
   useEffect(() => {
@@ -1241,10 +1278,17 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       </div>
 
       {/* Side Panel: Members & Chat */}
-      <div className="side-panel">
+      <div
+        className={`side-panel ${mobilePanel ? 'mobile-open' : ''}`}
+        data-mobile-panel={mobilePanel || 'closed'}
+        onClick={() => setMobilePanel(null)}
+      >
         {/* Members panel */}
-        <div className="glass-panel panel-section">
-          <div className="panel-header">{t.participantsTitle} ({roomState.clients.length})</div>
+        <div className="glass-panel panel-section members-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="panel-header mobile-panel-heading">
+            <span>{t.participantsTitle} ({roomState.clients.length})</span>
+            <button className="mobile-sheet-close" onClick={() => setMobilePanel(null)} aria-label={t.closeMobilePanel}>×</button>
+          </div>
           <div className="member-list">
             {roomState.clients.map((member) => (
               <div key={member.id} className="member-item" style={{ background: member.id === clientId ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
@@ -1261,10 +1305,13 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         </div>
 
         {/* Chat panel */}
-        <div className="glass-panel panel-section">
-          <div className="panel-header">{t.roomChatTitle}</div>
+        <div className="glass-panel panel-section chat-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="panel-header mobile-panel-heading">
+            <span>{t.roomChatTitle}</span>
+            <button className="mobile-sheet-close" onClick={() => setMobilePanel(null)} aria-label={t.closeMobilePanel}>×</button>
+          </div>
           <div className="chat-container">
-            <div className="chat-messages">
+            <div className="chat-messages" ref={chatMessagesRef}>
               {messages.length === 0 ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)', fontSize: '0.8rem', textAlign: 'center' }}>
                   {t.chatWelcome}
@@ -1285,7 +1332,6 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                   );
                 })
               )}
-              <div ref={chatBottomRef} />
             </div>
 
             <form onSubmit={handleSendChat} className="chat-input-area">
@@ -1303,6 +1349,27 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
           </div>
         </div>
       </div>
+
+      <nav className="room-mobile-dock" aria-label={t.roomMobileNavigation}>
+        <button
+          type="button"
+          className={mobilePanel === 'members' ? 'active' : ''}
+          onClick={() => setMobilePanel((current) => current === 'members' ? null : 'members')}
+        >
+          <span className="mobile-dock-icon" aria-hidden="true">◎</span>
+          <span>{t.participantsTitle}</span>
+          <strong>{roomState.clients.length}</strong>
+        </button>
+        <button
+          type="button"
+          className={mobilePanel === 'chat' ? 'active' : ''}
+          onClick={() => setMobilePanel((current) => current === 'chat' ? null : 'chat')}
+        >
+          <span className="mobile-dock-icon" aria-hidden="true">◌</span>
+          <span>{t.roomChatTitle}</span>
+          {unreadMessages > 0 && <strong className="mobile-unread">{Math.min(unreadMessages, 99)}</strong>}
+        </button>
+      </nav>
 
       {/* Microphone Selection Modal */}
       {showMicModal && (

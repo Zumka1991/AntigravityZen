@@ -116,6 +116,15 @@ function App() {
     };
   };
 
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
+
   const startGuestSession = async () => {
     try {
       const response = await fetch(`${API_BASE}/guest`, { method: 'POST' });

@@ -24,7 +24,7 @@ export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const latestMessageId = useRef(0);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   const mergeMessages = (incoming: GlobalChatMessage[]) => {
     if (incoming.length === 0) return;
@@ -86,7 +86,8 @@ export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
   }, [apiBase, token, t.globalChatLoadError]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesRef.current;
+    container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -128,7 +129,7 @@ export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
         <span className="global-chat-live">{t.globalChatLive}</span>
       </div>
 
-      <div className="global-chat-messages">
+      <div className="global-chat-messages" ref={messagesRef}>
         {messages.length === 0 ? (
           <div className="global-chat-empty">{t.globalChatEmpty}</div>
         ) : (
@@ -150,7 +151,6 @@ export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
             );
           })
         )}
-        <div ref={bottomRef} />
       </div>
 
       {error && <div className="global-chat-error">{error}</div>}
