@@ -87,9 +87,11 @@ func main() {
 	r.GET("/api/profiles", handlers.ListProfilesHandler(authManager))
 	r.GET("/api/profiles/:username", handlers.GetProfileHandler(authManager))
 	r.POST("/api/profiles/:username/like", handlers.SetProfileLikeHandler(authManager))
+	r.POST("/api/profiles/:username/ignore", handlers.SetUserIgnoredHandler(authManager))
 	r.GET("/api/messages", handlers.ListConversationsHandler(authManager))
 	r.GET("/api/messages/:username", handlers.ListDirectMessagesHandler(authManager))
 	r.POST("/api/messages/:username", handlers.SendDirectMessageHandler(authManager))
+	r.DELETE("/api/messages/:id", handlers.DeleteDirectMessageHandler(authManager))
 	r.GET("/api/notifications", handlers.DirectMessageNotificationsHandler(authManager))
 
 	r.GET("/api/rooms", handlers.GetRoomsHandler(hub))

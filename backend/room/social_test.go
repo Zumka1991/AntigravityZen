@@ -1,6 +1,7 @@
 package room
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -88,5 +89,47 @@ func TestDirectMessagesAndUnreadNotifications(t *testing.T) {
 	count, err = UnreadDirectMessageCount("Bob")
 	if err != nil || count != 0 {
 		t.Fatalf("message was not marked read, count %d: %v", count, err)
+	}
+}
+
+func TestIgnoringUserBlocksMessagesInBothDirections(t *testing.T) {
+	setupSocialTestDB(t)
+	if err := SetUserIgnored("Bob", "Alice", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddDirectMessage("Alice", "Bob", "hello"); err != ErrDirectMessagesBlocked {
+		t.Fatalf("ignored user could send a message: %v", err)
+	}
+	if _, err := AddDirectMessage("Bob", "Alice", "hello"); err != ErrDirectMessagesBlocked {
+		t.Fatalf("ignoring user could send a message: %v", err)
+	}
+
+	profile, err := GetUserProfile("Bob", "Alice")
+	if err != nil || !profile.IgnoredByMe {
+		t.Fatalf("ignore state missing from profile: %+v, %v", profile, err)
+	}
+	if err := SetUserIgnored("Bob", "Alice", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddDirectMessage("Alice", "Bob", "hello again"); err != nil {
+		t.Fatalf("message after unignore failed: %v", err)
+	}
+}
+
+func TestOnlySenderCanDeleteDirectMessage(t *testing.T) {
+	setupSocialTestDB(t)
+	message, err := AddDirectMessage("Alice", "Bob", "temporary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteDirectMessage("Bob", message.ID); err != sql.ErrNoRows {
+		t.Fatalf("recipient deleted someone else's message: %v", err)
+	}
+	if err := DeleteDirectMessage("Alice", message.ID); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := ListDirectMessages("Bob", "Alice")
+	if err != nil || len(messages) != 0 {
+		t.Fatalf("deleted message still returned: %+v, %v", messages, err)
 	}
 }

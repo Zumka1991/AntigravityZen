@@ -869,6 +869,26 @@
   flex-direction: column;
 }
 
+.dialog-header .dialog-user {
+  min-width: 0;
+  flex: 1;
+}
+
+.dialog-ignore {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 9px;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+}
+
+.dialog-ignore.active,
+.ignore-button.active {
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #c4b5fd;
+}
+
 .dialog-messages {
   display: flex;
   flex: 1;
@@ -904,15 +924,30 @@
   background: rgba(139, 92, 246, 0.18);
 }
 
-.direct-message > span {
-  display: block;
+.direct-message > .direct-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   margin-top: 0.25rem;
   color: var(--color-text-secondary);
   font-size: 0.68rem;
 }
 
-.direct-message.own > span {
-  text-align: right;
+.direct-message.own > .direct-message-meta {
+  justify-content: flex-end;
+}
+
+.direct-message-meta button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fca5a5;
+  font: inherit;
+  cursor: pointer;
+}
+
+.direct-message-meta button:hover {
+  text-decoration: underline;
 }
 
 .dialog-compose {
@@ -927,6 +962,14 @@
   min-width: 0;
   flex: 1;
   resize: none;
+}
+
+.dialog-blocked {
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-size: 0.85rem;
 }
 
 @media (max-width: 800px) {

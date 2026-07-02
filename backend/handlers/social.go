@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"meditation-app/room"
@@ -84,6 +86,31 @@ func SetProfileLikeHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	}
 }
 
+func SetUserIgnoredHandler(authManager *room.AuthManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username, ok := registeredUsername(c, authManager)
+		if !ok {
+			return
+		}
+		var payload struct {
+			Ignored bool `json:"ignored"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ignore state"})
+			return
+		}
+		if err := room.SetUserIgnored(username, c.Param("username"), payload.Ignored); err != nil {
+			status := http.StatusBadRequest
+			if err == sql.ErrNoRows {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ignored": payload.Ignored})
+	}
+}
+
 func ListConversationsHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username, ok := registeredUsername(c, authManager)
@@ -141,10 +168,37 @@ func SendDirectMessageHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			return
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			status := http.StatusBadRequest
+			if errors.Is(err, room.ErrDirectMessagesBlocked) {
+				status = http.StatusForbidden
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusCreated, message)
+	}
+}
+
+func DeleteDirectMessageHandler(authManager *room.AuthManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username, ok := registeredUsername(c, authManager)
+		if !ok {
+			return
+		}
+		messageID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil || messageID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+			return
+		}
+		if err := room.DeleteDirectMessage(username, messageID); err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not delete message"})
+			return
+		}
+		c.Status(http.StatusNoContent)
 	}
 }
 

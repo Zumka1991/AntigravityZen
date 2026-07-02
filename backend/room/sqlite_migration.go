@@ -55,6 +55,7 @@ func MigrateSQLiteFile(target *DB, path string) error {
 		},
 		{name: "room_participations", columns: []string{"room_id", "username", "was_host", "joined_at"}, boolColumns: map[int]bool{2: true}},
 		{name: "profile_likes", columns: []string{"profile_username", "liked_by", "created_at"}},
+		{name: "user_ignores", columns: []string{"ignoring_username", "ignored_username", "created_at"}},
 		{name: "direct_messages", columns: []string{"id", "sender_username", "recipient_username", "text", "created_at", "read_at"}},
 	}
 

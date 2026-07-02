@@ -234,6 +234,13 @@ func schemaQueries(dialect string) []string {
 			created_at BIGINT NOT NULL,
 			PRIMARY KEY (profile_username, liked_by)
 		)`,
+		`CREATE TABLE IF NOT EXISTS user_ignores (
+			ignoring_username TEXT NOT NULL,
+			ignored_username TEXT NOT NULL,
+			created_at BIGINT NOT NULL,
+			PRIMARY KEY (ignoring_username, ignored_username)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_ignores_ignored ON user_ignores(ignored_username, ignoring_username)`,
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS direct_messages (
 			id %s,
 			sender_username TEXT NOT NULL,
