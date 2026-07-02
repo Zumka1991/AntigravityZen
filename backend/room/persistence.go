@@ -219,7 +219,7 @@ func (h *Hub) LoadPersistentRooms() error {
 	for _, timer := range timers {
 		go h.scheduleRoomCompletion(timer.roomID, timer.startedAt, timer.duration)
 	}
-	log.Printf("Restored %d rooms from SQLite", len(h.Rooms))
+	log.Printf("Restored %d rooms from database", len(h.Rooms))
 	return nil
 }
 

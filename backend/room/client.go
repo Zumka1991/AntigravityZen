@@ -402,7 +402,7 @@ func InitTracks() {
 		err := dbConn.QueryRow("SELECT audio_url FROM tracks WHERE id = ?", t.ID).Scan(&currentURL)
 		if err == sql.ErrNoRows {
 			// Insert new track
-			_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, is_public) VALUES (?, ?, ?, ?, ?, 1)",
+			_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, is_public) VALUES (?, ?, ?, ?, ?, TRUE)",
 				t.ID, t.Title, t.Artist, t.AudioURL, t.Duration)
 			if err != nil {
 				log.Printf("Error inserting default track %s: %v", t.Title, err)
@@ -412,7 +412,7 @@ func InitTracks() {
 		} else if err == nil {
 			// If it's the old soundhelix placeholder, update it to the new local file
 			if strings.Contains(currentURL, "soundhelix.com") {
-				_, err := dbConn.Exec("UPDATE tracks SET title = ?, artist = ?, audio_url = ?, duration = ?, is_public = 1 WHERE id = ?",
+				_, err := dbConn.Exec("UPDATE tracks SET title = ?, artist = ?, audio_url = ?, duration = ?, is_public = TRUE WHERE id = ?",
 					t.Title, t.Artist, t.AudioURL, t.Duration, t.ID)
 				if err != nil {
 					log.Printf("Error updating default track %s: %v", t.Title, err)
@@ -424,13 +424,13 @@ func InitTracks() {
 			log.Printf("Error checking track %s in DB: %v", t.ID, err)
 		}
 	}
-	log.Println("Initialized default tracks in SQLite database")
+	log.Println("Initialized default tracks in database")
 }
 
 func FindTrack(id string) *Track {
 	var t Track
 	var sourcesJSON string
-	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]') FROM tracks WHERE id = ?", id).
+	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, COALESCE(owner_username, ''), COALESCE(is_public, FALSE), COALESCE(sources_json, '[]') FROM tracks WHERE id = ?", id).
 		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic, &sourcesJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -444,7 +444,7 @@ func FindTrack(id string) *Track {
 }
 
 func GetTracks() []Track {
-	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]') FROM tracks")
+	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, COALESCE(owner_username, ''), COALESCE(is_public, FALSE), COALESCE(sources_json, '[]') FROM tracks")
 	if err != nil {
 		log.Printf("Error getting tracks: %v", err)
 		return []Track{}
@@ -465,10 +465,10 @@ func GetTracks() []Track {
 
 func GetTracksForUser(username string) []Track {
 	rows, err := dbConn.Query(`
-		SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]')
+		SELECT id, title, artist, audio_url, duration, COALESCE(owner_username, ''), COALESCE(is_public, FALSE), COALESCE(sources_json, '[]')
 		FROM tracks
-		WHERE owner_username IS NULL OR owner_username = '' OR is_public = 1 OR owner_username = ?
-		ORDER BY title COLLATE NOCASE
+		WHERE owner_username IS NULL OR owner_username = '' OR is_public IS TRUE OR owner_username = ?
+		ORDER BY LOWER(title)
 	`, username)
 	if err != nil {
 		log.Printf("Error getting tracks for user %s: %v", username, err)

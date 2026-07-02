@@ -39,7 +39,7 @@ func RecordRoomParticipation(roomID, username string, wasHost bool) error {
 		INSERT INTO room_participations (room_id, username, was_host, joined_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(room_id, username) DO UPDATE SET
-			was_host = MAX(was_host, excluded.was_host)
+			was_host = room_participations.was_host OR excluded.was_host
 	`, roomID, username, wasHost, time.Now().UnixMilli())
 	return err
 }
@@ -51,8 +51,8 @@ func ListUserProfiles(viewer, query string) ([]UserProfile, error) {
 	pattern := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
 	rows, err := dbConn.Query(`
 		SELECT u.username,
-			COALESCE(SUM(CASE WHEN rp.was_host = 1 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN rp.was_host = 0 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN rp.was_host IS TRUE THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN rp.was_host IS FALSE THEN 1 ELSE 0 END), 0),
 			(SELECT COUNT(*) FROM profile_likes pl WHERE pl.profile_username = u.username),
 			EXISTS(SELECT 1 FROM profile_likes mine
 				WHERE mine.profile_username = u.username AND mine.liked_by = ?)
@@ -60,7 +60,7 @@ func ListUserProfiles(viewer, query string) ([]UserProfile, error) {
 		LEFT JOIN room_participations rp ON rp.username = u.username
 		WHERE LOWER(u.username) LIKE ?
 		GROUP BY u.username
-		ORDER BY u.username COLLATE NOCASE
+		ORDER BY LOWER(u.username)
 		LIMIT 100
 	`, viewer, pattern)
 	if err != nil {
@@ -104,8 +104,9 @@ func SetProfileLike(profileUsername, likedBy string, liked bool) error {
 	}
 	if liked {
 		_, err := dbConn.Exec(`
-			INSERT OR IGNORE INTO profile_likes (profile_username, liked_by, created_at)
+			INSERT INTO profile_likes (profile_username, liked_by, created_at)
 			VALUES (?, ?, ?)
+			ON CONFLICT(profile_username, liked_by) DO NOTHING
 		`, canonical, likedBy, time.Now().UnixMilli())
 		return err
 	}
@@ -131,15 +132,16 @@ func AddDirectMessage(sender, recipient, text string) (DirectMessage, error) {
 		return DirectMessage{}, err
 	}
 	createdAt := time.Now().UnixMilli()
-	result, err := dbConn.Exec(`
+	var messageID int64
+	err := dbConn.QueryRow(`
 		INSERT INTO direct_messages (sender_username, recipient_username, text, created_at)
 		VALUES (?, ?, ?, ?)
-	`, sender, canonical, text, createdAt)
+		RETURNING id
+	`, sender, canonical, text, createdAt).Scan(&messageID)
 	if err != nil {
 		return DirectMessage{}, err
 	}
-	id, _ := result.LastInsertId()
-	return DirectMessage{ID: id, Sender: sender, Recipient: canonical, Text: text, CreatedAt: createdAt}, nil
+	return DirectMessage{ID: messageID, Sender: sender, Recipient: canonical, Text: text, CreatedAt: createdAt}, nil
 }
 
 func ListDirectMessages(viewer, other string) ([]DirectMessage, error) {

@@ -18,13 +18,13 @@ type StoredUser struct {
 	Salt         string `json:"salt"`
 }
 
-// AuthManager управляет сессиями и пользователями с помощью SQLite
+// AuthManager управляет сессиями и пользователями с помощью БД.
 type AuthManager struct {
-	db *sql.DB
+	db *DB
 }
 
 // NewAuthManager создает новый менеджер авторизации с использованием БД
-func NewAuthManager(db *sql.DB) *AuthManager {
+func NewAuthManager(db *DB) *AuthManager {
 	_, _ = db.Exec("DELETE FROM sessions WHERE expires_at <= ?", time.Now().Unix())
 	return &AuthManager{
 		db: db,

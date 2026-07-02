@@ -14,7 +14,7 @@ if ! ssh "$DEPLOY_HOST" "docker compose version >/dev/null 2>&1"; then
 fi
 
 echo "Uploading application to ${DEPLOY_HOST}:${DEPLOY_DIR}..."
-tar \
+COPYFILE_DISABLE=1 tar \
   --exclude=.git \
   --exclude=.env \
   --exclude=.env.production \
@@ -33,9 +33,13 @@ cd "$DEPLOY_DIR"
 
 if [[ ! -f .env ]]; then
   ADMIN_PASSWORD="$(openssl rand -base64 32 | tr -d '\n')"
+  POSTGRES_PASSWORD="$(openssl rand -hex 32)"
   {
     printf 'DOMAIN=%s\n' "$DOMAIN"
     printf 'ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD"
+    printf 'POSTGRES_DB=meditation\n'
+    printf 'POSTGRES_USER=meditation\n'
+    printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
     printf 'TZ=Asia/Barnaul\n'
     printf 'GHCR_OWNER=zumka1991\n'
     printf 'IMAGE_TAG=latest\n'
@@ -44,6 +48,28 @@ if [[ ! -f .env ]]; then
   printf '\nAdmin login: admin\nAdmin password: %s\nSave it now; it will not be shown again.\n\n' "$ADMIN_PASSWORD"
 else
   sed -i "s/^DOMAIN=.*/DOMAIN=${DOMAIN}/" .env
+  if ! grep -q '^POSTGRES_PASSWORD=' .env; then
+    {
+      printf 'POSTGRES_DB=meditation\n'
+      printf 'POSTGRES_USER=meditation\n'
+      printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)"
+    } >> .env
+  fi
+fi
+
+SQLITE_VOLUME=zenworld_backend_data
+if docker volume inspect "$SQLITE_VOLUME" >/dev/null 2>&1 \
+  && docker run --rm -v "$SQLITE_VOLUME:/data:ro" alpine test -f /data/meditation.db; then
+  echo "Legacy SQLite database found; stopping the old backend and creating a safety backup..."
+  docker compose stop backend || true
+  mkdir -p "$DEPLOY_DIR/backups"
+  BACKUP_NAME="sqlite-before-postgres-$(date -u +%Y%m%dT%H%M%SZ).tgz"
+  docker run --rm \
+    -v "$SQLITE_VOLUME:/data:ro" \
+    -v "$DEPLOY_DIR/backups:/backup" \
+    alpine tar -czf "/backup/$BACKUP_NAME" -C /data .
+  chmod 600 "$DEPLOY_DIR/backups/$BACKUP_NAME"
+  echo "SQLite safety backup: $DEPLOY_DIR/backups/$BACKUP_NAME"
 fi
 
 docker compose pull

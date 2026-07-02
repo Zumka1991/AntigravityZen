@@ -33,11 +33,11 @@ func InitBackgrounds() {
 	for _, background := range defaultMeditationBackgrounds {
 		if _, err := dbConn.Exec(`
 			INSERT INTO meditation_backgrounds (id, title, image_url, is_default, uploaded_by)
-			VALUES (?, ?, ?, 1, NULL)
+			VALUES (?, ?, ?, TRUE, NULL)
 			ON CONFLICT(id) DO UPDATE SET
 				title = excluded.title,
 				image_url = excluded.image_url,
-				is_default = 1,
+				is_default = TRUE,
 				uploaded_by = NULL
 		`, background.ID, background.Title, background.ImageURL); err != nil {
 			fmt.Printf("Failed to initialize background %s: %v\n", background.ID, err)
@@ -47,7 +47,7 @@ func InitBackgrounds() {
 
 func GetBackgrounds() []MeditationBackground {
 	rows, err := dbConn.Query(`
-		SELECT id, title, image_url, is_default, IFNULL(uploaded_by, '')
+		SELECT id, title, image_url, is_default, COALESCE(uploaded_by, '')
 		FROM meditation_backgrounds
 		ORDER BY
 			is_default DESC,
@@ -64,7 +64,7 @@ func GetBackgrounds() []MeditationBackground {
 				WHEN 'dawn-meadow' THEN 10
 				ELSE 100
 			END,
-			title COLLATE NOCASE
+			LOWER(title)
 	`)
 	if err != nil {
 		return []MeditationBackground{}
@@ -90,7 +90,7 @@ func GetBackgrounds() []MeditationBackground {
 func FindBackground(id string) *MeditationBackground {
 	var background MeditationBackground
 	err := dbConn.QueryRow(`
-		SELECT id, title, image_url, is_default, IFNULL(uploaded_by, '')
+		SELECT id, title, image_url, is_default, COALESCE(uploaded_by, '')
 		FROM meditation_backgrounds
 		WHERE id = ?
 	`, id).Scan(
@@ -146,7 +146,7 @@ func AddBackground(title, imageURL, uploadedBy string) (MeditationBackground, er
 	}
 	_, err := dbConn.Exec(`
 		INSERT INTO meditation_backgrounds (id, title, image_url, is_default, uploaded_by)
-		VALUES (?, ?, ?, 0, ?)
+		VALUES (?, ?, ?, FALSE, ?)
 	`, background.ID, background.Title, background.ImageURL, background.UploadedBy)
 	if err != nil {
 		return MeditationBackground{}, err
@@ -155,7 +155,7 @@ func AddBackground(title, imageURL, uploadedBy string) (MeditationBackground, er
 }
 
 func DeleteBackground(id string) error {
-	result, err := dbConn.Exec("DELETE FROM meditation_backgrounds WHERE id = ? AND is_default = 0", id)
+	result, err := dbConn.Exec("DELETE FROM meditation_backgrounds WHERE id = ? AND is_default IS FALSE", id)
 	if err != nil {
 		return err
 	}

@@ -1,15 +1,39 @@
 name: zenworld
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-meditation}
+      POSTGRES_USER: ${POSTGRES_USER:-meditation}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - app
+
   backend:
     image: ghcr.io/${GHCR_OWNER:-zumka1991}/antigravityzen-backend:${IMAGE_TAG:-latest}
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-meditation}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-meditation}?sslmode=disable
       GIN_MODE: release
       GOMEMLIMIT: 220MiB
       TZ: ${TZ:-Europe/Moscow}
     volumes:
       - backend_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     mem_limit: 256m
     pids_limit: 100
@@ -62,6 +86,7 @@ networks:
   app:
 
 volumes:
+  postgres_data:
   backend_data:
   caddy_data:
   caddy_config:

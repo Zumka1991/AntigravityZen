@@ -13,7 +13,7 @@ type ChatMessage struct {
 
 // InitChat verifies that the chat history is ready
 func InitChat() {
-	log.Println("Chat history system initialized with SQLite")
+	log.Println("Chat history system initialized")
 }
 
 // GetChatHistory returns last 100 chat messages for a specific room sorted chronologically
@@ -44,7 +44,7 @@ func GetChatHistory(roomID string) []ChatMessage {
 	return history
 }
 
-// AppendChatMessage adds a message to the history of a room in SQLite
+// AppendChatMessage adds a message to the history of a room.
 func AppendChatMessage(roomID string, msg ChatMessage) {
 	_, err := dbConn.Exec("INSERT INTO chats (room_id, username, text, timestamp) VALUES (?, ?, ?, ?)",
 		roomID, msg.Username, msg.Text, msg.Timestamp)

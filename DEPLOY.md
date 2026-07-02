@@ -1,83 +1,134 @@
 # Deploying Zenworld
 
-The production stack runs the Go API, static frontend, SQLite storage, and Caddy
-with automatic HTTPS. Only ports 80 and 443 are published. Application images
-are built by GitHub Actions and published to GHCR for `linux/amd64`.
+The production stack runs the Go API, static frontend, PostgreSQL 17, and Caddy
+with automatic HTTPS. Only ports 80 and 443 are public. Application images are
+built by GitHub Actions and published to GHCR for `linux/amd64`.
 
-## 1. Publish the images
+## Local development
 
-Push the project to the `main` branch. The `Publish container images` workflow
-publishes:
+### Native macOS PostgreSQL (without Docker)
 
-- `ghcr.io/zumka1991/antigravityzen-backend:latest`
-- `ghcr.io/zumka1991/antigravityzen-frontend:latest`
+Install and start PostgreSQL:
 
-Make both packages public in their GitHub package settings. If they remain
-private, log the VPS into GHCR once using a classic token with `read:packages`.
+```bash
+brew install postgresql@17
+brew services start postgresql@17
+```
 
-## 2. Point the domain to the VPS
+Create the local role and database once:
 
-In the REG.RU DNS editor, create these records:
+```bash
+PGBIN="$(brew --prefix postgresql@17)/bin"
+"$PGBIN/psql" -d postgres -c \
+  "CREATE ROLE meditation LOGIN PASSWORD 'meditation'"
+"$PGBIN/createdb" -O meditation meditation
+```
 
-- `A` record: `@` → the public IPv4 address of the VPS
-- `A` record: `www` → the public IPv4 address of the VPS (optional)
+The backend's default development URL is
+`postgres://meditation:meditation@localhost:5432/meditation?sslmode=disable`,
+so only the required admin password needs to be supplied:
 
-Remove conflicting `A`/`AAAA` records. The default configuration serves
-`zenworld.ru`; add `www.zenworld.ru` to `DOMAIN` only if it is also configured.
+```bash
+cd backend
+ADMIN_PASSWORD=local-admin go run .
+```
 
-## 3. Prepare an Ubuntu/Debian VPS
+The local Homebrew service can be controlled with:
 
-From the project directory:
+```bash
+brew services list
+brew services stop postgresql@17
+brew services start postgresql@17
+```
+
+### Docker development
+
+Copy the environment template and choose strong local passwords:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d postgres
+```
+
+PostgreSQL is then available only on localhost port 5432. Run the backend from
+another terminal:
+
+```bash
+cd backend
+ADMIN_PASSWORD=local-admin \
+DATABASE_URL='postgres://meditation:YOUR_POSTGRES_PASSWORD@localhost:5432/meditation?sslmode=disable' \
+go run .
+```
+
+Or build and run the complete stack:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+## Production deploy
+
+1. Push `main` to publish the backend and frontend images to GHCR.
+2. Point the domain's `A` record at the VPS.
+3. Prepare an Ubuntu/Debian VPS:
 
 ```bash
 ssh root@SERVER_IP 'bash -s' < scripts/bootstrap-server.sh
 ```
 
-The script installs Docker Compose and creates 1 GB of swap as emergency
-headroom on a 1 GB VPS.
-
-## 4. Deploy
+4. Deploy:
 
 ```bash
 DEPLOY_HOST=root@SERVER_IP ./scripts/deploy.sh
 ```
 
-On the first deploy, the script generates and prints the `admin` password once.
-Application data is stored in a Docker volume and survives redeployments.
+The first deploy generates independent admin and PostgreSQL passwords in the
+server-side `/opt/zenworld/.env`. PostgreSQL is reachable only through the
+private Compose network in production.
 
-Future deployments use the same command. The server only downloads the new
-images and restarts the containers; it does not compile the application.
+### Existing SQLite production data
 
-## Local container build
+Keep the existing `zenworld_backend_data` volume in place. On the first start
+with PostgreSQL, the backend automatically imports `/data/meditation.db` in one
+transaction. After success it renames the source to
+`/data/meditation.db.migrated`. If import fails, startup stops and the original
+SQLite file remains available for recovery.
 
-Build and run exactly the same stack locally:
+Before migration, `scripts/deploy.sh` stops the old SQLite backend and creates a
+full safety archive under `/opt/zenworld/backups/`. Do not remove that archive
+until the checks below pass.
+
+Check the migration before deleting any old backup:
 
 ```bash
-cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
-```
-
-For another installation directory:
-
-```bash
-DEPLOY_HOST=root@SERVER_IP DEPLOY_DIR=/srv/zenworld ./scripts/deploy.sh
+ssh root@SERVER_IP
+cd /opt/zenworld
+docker compose logs backend
+docker compose exec postgres psql -U meditation -d meditation -c '\dt'
 ```
 
 ## Operations
 
 ```bash
-ssh root@SERVER_IP
 cd /opt/zenworld
 docker compose logs -f
 docker compose ps
 docker compose restart
 ```
 
-Back up the persistent data:
+Create a PostgreSQL backup:
 
 ```bash
-docker run --rm \
-  -v zenworld_backend_data:/data:ro \
-  -v "$PWD":/backup \
-  alpine tar -czf /backup/zenworld-data.tgz -C /data .
+docker compose exec -T postgres \
+  pg_dump -U meditation -d meditation -Fc > zenworld-postgres.dump
 ```
+
+Restore into an empty database:
+
+```bash
+docker compose exec -T postgres \
+  pg_restore -U meditation -d meditation --clean --if-exists < zenworld-postgres.dump
+```
+
+The `backend_data` volume still stores uploaded recordings and the one-time
+SQLite migration backup. The `postgres_data` volume stores the live database.

@@ -20,8 +20,6 @@ logs/
 data/
 backend/users.json
 backend/tracks.json
-backend/meditation.db
-backend/meditation.db-shm
-backend/meditation.db-wal
+backend/meditation.db*
 backend/uploads/
 backend/*.json.bak

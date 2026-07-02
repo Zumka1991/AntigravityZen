@@ -1,4 +1,4 @@
 .git
-meditation.db
+meditation.db*
 uploads
 *_test.go

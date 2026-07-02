@@ -12,7 +12,14 @@ import (
 )
 
 func main() {
-	db := room.InitDB("meditation.db")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = "postgres://meditation:meditation@localhost:5432/meditation?sslmode=disable"
+	}
+	db := room.InitDB(databaseURL)
+	if err := room.MigrateSQLiteFile(db, "meditation.db"); err != nil {
+		log.Fatalf("Could not migrate legacy SQLite database: %v", err)
+	}
 	room.MigrateJSONToDB(db)
 	room.InitTracks()
 	room.InitChat()
@@ -61,6 +68,10 @@ func main() {
 	r.Use(corsMiddleware())
 
 	r.GET("/healthz", func(c *gin.Context) {
+		if err := db.Ping(); err != nil {
+			c.JSON(503, gin.H{"status": "unhealthy", "database": "unavailable"})
+			return
+		}
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 

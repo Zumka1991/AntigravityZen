@@ -79,17 +79,12 @@ func AppendGlobalChatMessage(username, text string) (GlobalChatMessage, error) {
 		Timestamp: time.Now().UnixMilli(),
 	}
 
-	result, err := dbConn.Exec(
-		"INSERT INTO global_chat_messages (username, text, timestamp) VALUES (?, ?, ?)",
+	err := dbConn.QueryRow(
+		"INSERT INTO global_chat_messages (username, text, timestamp) VALUES (?, ?, ?) RETURNING id",
 		message.Username,
 		message.Text,
 		message.Timestamp,
-	)
-	if err != nil {
-		return GlobalChatMessage{}, err
-	}
-
-	message.ID, err = result.LastInsertId()
+	).Scan(&message.ID)
 	if err != nil {
 		return GlobalChatMessage{}, err
 	}
