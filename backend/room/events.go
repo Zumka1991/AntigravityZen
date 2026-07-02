@@ -3,9 +3,12 @@ package room
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
+
+const abandonedEventGracePeriod = time.Hour
 
 type MeditationEvent struct {
 	ID            string `json:"id"`
@@ -61,10 +64,6 @@ func ListMeditationEvents(username string) ([]MeditationEvent, error) {
 	if dbConn == nil {
 		return nil, errors.New("database is not initialized")
 	}
-	// A missed start is not the same as a completed meditation. Keep it in the
-	// poster so the community can wait for a late host; prune only abandoned
-	// events after a generous grace period.
-	staleBefore := time.Now().Add(-24 * time.Hour).UnixMilli()
 	rows, err := dbConn.Query(`
 		SELECT e.id, e.title, e.description, e.host_username, e.room_id,
 		       e.starts_at, e.duration, COALESCE(e.track_id, ''),
@@ -76,10 +75,9 @@ func ListMeditationEvents(username string) ([]MeditationEvent, error) {
 		       )
 		FROM meditation_events e
 		LEFT JOIN meditation_event_attendees a ON a.event_id = e.id
-		WHERE e.starts_at > ?
 		GROUP BY e.id
 		ORDER BY e.starts_at ASC
-	`, username, staleBefore)
+	`, username)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +97,100 @@ func ListMeditationEvents(username string) ([]MeditationEvent, error) {
 		events = append(events, event)
 	}
 	return events, rows.Err()
+}
+
+// PruneAbandonedMeditationEvents removes scheduled events whose host did not
+// arrive within the one-hour grace period. An already playing room is kept even
+// if its host temporarily disconnects.
+func (h *Hub) PruneAbandonedMeditationEvents(now time.Time) (int64, error) {
+	if dbConn == nil {
+		return 0, errors.New("database is not initialized")
+	}
+
+	rows, err := dbConn.Query(`
+		SELECT id, room_id, host_username
+		FROM meditation_events
+		WHERE starts_at <= ?
+	`, now.Add(-abandonedEventGracePeriod).UnixMilli())
+	if err != nil {
+		return 0, err
+	}
+
+	type candidate struct {
+		eventID      string
+		roomID       string
+		hostUsername string
+	}
+	candidates := make([]candidate, 0)
+	for rows.Next() {
+		var item candidate
+		if err := rows.Scan(&item.eventID, &item.roomID, &item.hostUsername); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		candidates = append(candidates, item)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	abandonedIDs := make([]string, 0, len(candidates))
+	h.Mutex.RLock()
+	defer h.Mutex.RUnlock()
+	for _, item := range candidates {
+		hostPresent := false
+		roomStatus := ""
+		if eventRoom, exists := h.Rooms[item.roomID]; exists {
+			eventRoom.Mutex.RLock()
+			roomStatus = eventRoom.Status
+			for client := range eventRoom.Clients {
+				if strings.EqualFold(client.Username, item.hostUsername) {
+					hostPresent = true
+					break
+				}
+			}
+			eventRoom.Mutex.RUnlock()
+		}
+		if !hostPresent && roomStatus != "playing" {
+			abandonedIDs = append(abandonedIDs, item.eventID)
+		}
+	}
+
+	if len(abandonedIDs) == 0 {
+		return 0, nil
+	}
+
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var deleted int64
+	for _, eventID := range abandonedIDs {
+		if _, err := tx.Exec(
+			"DELETE FROM meditation_event_attendees WHERE event_id = ?",
+			eventID,
+		); err != nil {
+			return 0, err
+		}
+		result, err := tx.Exec("DELETE FROM meditation_events WHERE id = ?", eventID)
+		if err != nil {
+			return 0, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		deleted += affected
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit abandoned event cleanup: %w", err)
+	}
+	return deleted, nil
 }
 
 func SetMeditationEventAttendance(eventID, username string, attending bool) error {

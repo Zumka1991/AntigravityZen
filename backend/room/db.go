@@ -46,7 +46,8 @@ func InitDB(dbPath string) *sql.DB {
 			audio_url TEXT NOT NULL,
 			duration INTEGER NOT NULL,
 			owner_username TEXT,
-			is_public INTEGER NOT NULL DEFAULT 0
+			is_public INTEGER NOT NULL DEFAULT 0,
+			sources_json TEXT NOT NULL DEFAULT '[]'
 		);`,
 		`CREATE TABLE IF NOT EXISTS chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,6 +176,16 @@ func InitDB(dbPath string) *sql.DB {
 			log.Printf("Error adding is_public column to tracks table: %v", err)
 		} else {
 			log.Println("Added is_public column to tracks table successfully")
+		}
+	}
+
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('tracks') WHERE name='sources_json')").Scan(&colExists)
+	if err == nil && !colExists {
+		_, err = db.Exec("ALTER TABLE tracks ADD COLUMN sources_json TEXT NOT NULL DEFAULT '[]'")
+		if err != nil {
+			log.Printf("Error adding sources_json column to tracks table: %v", err)
+		} else {
+			log.Println("Added sources_json column to tracks table successfully")
 		}
 	}
 

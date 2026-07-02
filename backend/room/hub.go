@@ -22,14 +22,20 @@ var upgrader = websocket.Upgrader{
 }
 
 // Track represents a meditation music track
+type TrackSource struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
 type Track struct {
-	ID            string `json:"id"`
-	Title         string `json:"title"`
-	Artist        string `json:"artist"`
-	AudioURL      string `json:"audioUrl"`
-	Duration      int    `json:"duration"` // in seconds
-	OwnerUsername string `json:"ownerUsername,omitempty"`
-	IsPublic      bool   `json:"isPublic"`
+	ID            string        `json:"id"`
+	Title         string        `json:"title"`
+	Artist        string        `json:"artist"`
+	AudioURL      string        `json:"audioUrl"`
+	Duration      int           `json:"duration"` // in seconds
+	OwnerUsername string        `json:"ownerUsername,omitempty"`
+	IsPublic      bool          `json:"isPublic"`
+	Sources       []TrackSource `json:"sources,omitempty"`
 }
 
 // Message sent over websocket

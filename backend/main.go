@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"meditation-app/handlers"
 	"meditation-app/room"
@@ -23,6 +24,22 @@ func main() {
 		log.Printf("Could not restore rooms: %v", err)
 	}
 	go hub.Run()
+	if deleted, err := hub.PruneAbandonedMeditationEvents(time.Now()); err != nil {
+		log.Printf("Could not prune abandoned meditation events: %v", err)
+	} else if deleted > 0 {
+		log.Printf("Removed %d abandoned meditation events", deleted)
+	}
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			if deleted, err := hub.PruneAbandonedMeditationEvents(now); err != nil {
+				log.Printf("Could not prune abandoned meditation events: %v", err)
+			} else if deleted > 0 {
+				log.Printf("Removed %d abandoned meditation events", deleted)
+			}
+		}
+	}()
 
 	authManager := room.NewAuthManager(db)
 	adminPassword := os.Getenv("ADMIN_PASSWORD")

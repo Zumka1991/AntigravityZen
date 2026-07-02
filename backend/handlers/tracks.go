@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 )
 
 const maxTrackUploadSize = 100 << 20
+const maxTrackSources = 8
 
 // authenticateUser validates a session and returns its username.
 func authenticateUser(c *gin.Context, authManager *room.AuthManager) (string, bool) {
@@ -84,6 +87,11 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTrackUploadSize)
 		title := strings.TrimSpace(c.PostForm("title"))
 		durationStr := c.PostForm("duration")
+		sources, err := parseTrackSources(c.PostForm("sources"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		if title == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
 			return
@@ -132,7 +140,7 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 		}
 
 		audioURL := fmt.Sprintf("/uploads/%s", uniqueFilename)
-		newTrack, err := room.AddTrack(title, username, audioURL, durationNum, username, true)
+		newTrack, err := room.AddTrackWithSources(title, username, audioURL, durationNum, username, true, sources)
 		if err != nil {
 			os.Remove(uploadPath) // Clean up file on failure
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -141,6 +149,41 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, newTrack)
 	}
+}
+
+func parseTrackSources(raw string) ([]room.TrackSource, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	var sources []room.TrackSource
+	if err := json.Unmarshal([]byte(raw), &sources); err != nil {
+		return nil, fmt.Errorf("invalid sources")
+	}
+	if len(sources) > maxTrackSources {
+		return nil, fmt.Errorf("no more than %d sources are allowed", maxTrackSources)
+	}
+
+	cleaned := make([]room.TrackSource, 0, len(sources))
+	for _, source := range sources {
+		source.Label = strings.TrimSpace(source.Label)
+		source.URL = strings.TrimSpace(source.URL)
+		if source.Label == "" && source.URL == "" {
+			continue
+		}
+		if source.Label == "" || len([]rune(source.Label)) > 80 {
+			return nil, fmt.Errorf("each source needs a label up to 80 characters")
+		}
+		if len(source.URL) > 2048 {
+			return nil, fmt.Errorf("source URL is too long")
+		}
+		parsedURL, err := url.ParseRequestURI(source.URL)
+		if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+			return nil, fmt.Errorf("source URLs must start with http:// or https://")
+		}
+		cleaned = append(cleaned, source)
+	}
+	return cleaned, nil
 }
 
 // DeleteTrackHandler handles DELETE /api/tracks

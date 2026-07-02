@@ -910,6 +910,50 @@ input[type="range"]:focus {
   font-size: 0.9375rem;
 }
 
+.meditation-sources {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+}
+
+.meditation-sources > span {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.meditation-sources > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.meditation-sources a,
+.library-track-sources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid rgba(102, 219, 200, 0.25);
+  border-radius: 999px;
+  color: #8ce6d7;
+  background: rgba(8, 11, 20, 0.48);
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.meditation-sources a {
+  padding: 0.34rem 0.58rem;
+}
+
+.meditation-sources a:hover,
+.library-track-sources a:hover {
+  border-color: rgba(102, 219, 200, 0.62);
+  background: rgba(102, 219, 200, 0.1);
+}
+
 /* The Breathing Ring Outer Glow */
 .visualizer-container {
   position: relative;
@@ -1196,6 +1240,82 @@ body:has(.in-room) {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.track-sources-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  grid-column: span 2;
+}
+
+.track-sources-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.track-sources-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.track-sources-heading label {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.track-sources-heading small {
+  color: rgba(255, 255, 255, 0.43);
+  font-size: 0.72rem;
+}
+
+.add-source-button {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.76rem;
+}
+
+.track-source-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.track-source-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.7fr) minmax(200px, 1.3fr) 34px;
+  gap: 0.5rem;
+}
+
+.track-source-row input {
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.remove-source-button {
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  border-radius: 10px;
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.08);
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.library-track-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.library-track-sources a {
+  padding: 0.23rem 0.48rem;
+  font-size: 0.7rem;
+}
+
 .audio-file-picker {
   min-height: 48px;
   padding: 0.45rem;
@@ -1361,6 +1481,23 @@ body:has(.in-room) {
   }
   .admin-track-form .span-2 {
     grid-column: span 1 !important;
+  }
+
+  .track-sources-editor {
+    grid-column: span 1;
+  }
+
+  .track-sources-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .track-source-row {
+    grid-template-columns: minmax(0, 1fr) 34px;
+  }
+
+  .track-source-row input:first-child {
+    grid-column: 1 / -1;
   }
 
   .audio-file-picker {

@@ -41,6 +41,10 @@ func GetMeditationEventsHandler(hub *room.Hub, authManager *room.AuthManager) gi
 		if !ok {
 			return
 		}
+		if _, err := hub.PruneAbandonedMeditationEvents(time.Now()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not clean up expired events"})
+			return
+		}
 		events, err := room.ListMeditationEvents(username)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load events"})

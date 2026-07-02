@@ -9,6 +9,12 @@ export interface Track {
   duration: number;
   ownerUsername?: string;
   isPublic: boolean;
+  sources?: TrackSource[];
+}
+
+export interface TrackSource {
+  label: string;
+  url: string;
 }
 
 export interface MeditationBackground {

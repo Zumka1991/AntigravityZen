@@ -429,8 +429,9 @@ func InitTracks() {
 
 func FindTrack(id string) *Track {
 	var t Track
-	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0) FROM tracks WHERE id = ?", id).
-		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic)
+	var sourcesJSON string
+	err := dbConn.QueryRow("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]') FROM tracks WHERE id = ?", id).
+		Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic, &sourcesJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
@@ -438,11 +439,12 @@ func FindTrack(id string) *Track {
 		log.Printf("Error finding track %s: %v", id, err)
 		return nil
 	}
+	t.Sources = decodeTrackSources(sourcesJSON)
 	return &t
 }
 
 func GetTracks() []Track {
-	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0) FROM tracks")
+	rows, err := dbConn.Query("SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]') FROM tracks")
 	if err != nil {
 		log.Printf("Error getting tracks: %v", err)
 		return []Track{}
@@ -452,7 +454,9 @@ func GetTracks() []Track {
 	var tracks []Track
 	for rows.Next() {
 		var t Track
-		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic); err == nil {
+		var sourcesJSON string
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic, &sourcesJSON); err == nil {
+			t.Sources = decodeTrackSources(sourcesJSON)
 			tracks = append(tracks, t)
 		}
 	}
@@ -461,7 +465,7 @@ func GetTracks() []Track {
 
 func GetTracksForUser(username string) []Track {
 	rows, err := dbConn.Query(`
-		SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0)
+		SELECT id, title, artist, audio_url, duration, IFNULL(owner_username, ''), IFNULL(is_public, 0), IFNULL(sources_json, '[]')
 		FROM tracks
 		WHERE owner_username IS NULL OR owner_username = '' OR is_public = 1 OR owner_username = ?
 		ORDER BY title COLLATE NOCASE
@@ -475,7 +479,9 @@ func GetTracksForUser(username string) []Track {
 	var tracks []Track
 	for rows.Next() {
 		var t Track
-		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic); err == nil {
+		var sourcesJSON string
+		if err := rows.Scan(&t.ID, &t.Title, &t.Artist, &t.AudioURL, &t.Duration, &t.OwnerUsername, &t.IsPublic, &sourcesJSON); err == nil {
+			t.Sources = decodeTrackSources(sourcesJSON)
 			tracks = append(tracks, t)
 		}
 	}
@@ -484,6 +490,10 @@ func GetTracksForUser(username string) []Track {
 
 // AddTrack добавляет новый трек в БД
 func AddTrack(title, artist, audioURL string, duration int, ownerUsername string, isPublic bool) (Track, error) {
+	return AddTrackWithSources(title, artist, audioURL, duration, ownerUsername, isPublic, nil)
+}
+
+func AddTrackWithSources(title, artist, audioURL string, duration int, ownerUsername string, isPublic bool, sources []TrackSource) (Track, error) {
 	title = strings.TrimSpace(title)
 	artist = strings.TrimSpace(artist)
 	audioURL = strings.TrimSpace(audioURL)
@@ -530,15 +540,28 @@ func AddTrack(title, artist, audioURL string, duration int, ownerUsername string
 		Duration:      duration,
 		OwnerUsername: ownerUsername,
 		IsPublic:      isPublic,
+		Sources:       sources,
 	}
 
-	_, err := dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, owner_username, is_public) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		newTrack.ID, newTrack.Title, newTrack.Artist, newTrack.AudioURL, newTrack.Duration, newTrack.OwnerUsername, newTrack.IsPublic)
+	sourcesJSON, err := json.Marshal(newTrack.Sources)
+	if err != nil {
+		return Track{}, err
+	}
+	_, err = dbConn.Exec("INSERT INTO tracks (id, title, artist, audio_url, duration, owner_username, is_public, sources_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		newTrack.ID, newTrack.Title, newTrack.Artist, newTrack.AudioURL, newTrack.Duration, newTrack.OwnerUsername, newTrack.IsPublic, string(sourcesJSON))
 	if err != nil {
 		return Track{}, err
 	}
 
 	return newTrack, nil
+}
+
+func decodeTrackSources(raw string) []TrackSource {
+	var sources []TrackSource
+	if err := json.Unmarshal([]byte(raw), &sources); err != nil {
+		return nil
+	}
+	return sources
 }
 
 // DeleteTrack удаляет трек по ID из БД

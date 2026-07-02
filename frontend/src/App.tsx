@@ -116,6 +116,7 @@ function App() {
   const [trackTitle, setTrackTitle] = useState('');
   const [trackFile, setTrackFile] = useState<File | null>(null);
   const [trackDuration, setTrackDuration] = useState('');
+  const [trackSources, setTrackSources] = useState([{ label: '', url: '' }]);
   const [durationDetection, setDurationDetection] = useState<'idle' | 'detecting' | 'detected' | 'manual' | 'failed'>('idle');
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -763,6 +764,9 @@ function App() {
     formData.append('title', trackTitle);
     formData.append('duration', durationNum.toString());
     formData.append('file', trackFile);
+    formData.append('sources', JSON.stringify(
+      trackSources.filter((source) => source.label.trim() || source.url.trim())
+    ));
 
     try {
       const res = await fetch(`${API_BASE}/tracks`, {
@@ -783,6 +787,7 @@ function App() {
       setTrackTitle('');
       setTrackFile(null);
       setTrackDuration('');
+      setTrackSources([{ label: '', url: '' }]);
       setDurationDetection('idle');
       
       const fileInput = document.getElementById('admin-track-file') as HTMLInputElement;
@@ -1460,6 +1465,64 @@ function App() {
                 />
               </div>
 
+              <div className="track-sources-editor span-2">
+                <div className="track-sources-heading">
+                  <div>
+                    <label>{t.trackSourcesLabel}</label>
+                    <small>{t.trackSourcesHint}</small>
+                  </div>
+                  {trackSources.length < 8 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary add-source-button"
+                      onClick={() => setTrackSources((sources) => [...sources, { label: '', url: '' }])}
+                      disabled={isUploading}
+                    >
+                      + {t.addSourceBtn}
+                    </button>
+                  )}
+                </div>
+                <div className="track-source-rows">
+                  {trackSources.map((source, index) => (
+                    <div className="track-source-row" key={index}>
+                      <input
+                        type="text"
+                        placeholder={t.sourceLabelPlaceholder}
+                        aria-label={t.sourceLabelPlaceholder}
+                        value={source.label}
+                        maxLength={80}
+                        disabled={isUploading}
+                        onChange={(event) => setTrackSources((sources) => sources.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, label: event.target.value } : item
+                        )))}
+                      />
+                      <input
+                        type="url"
+                        placeholder={t.sourceUrlPlaceholder}
+                        aria-label={t.sourceUrlPlaceholder}
+                        value={source.url}
+                        maxLength={2048}
+                        disabled={isUploading}
+                        onChange={(event) => setTrackSources((sources) => sources.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, url: event.target.value } : item
+                        )))}
+                      />
+                      {trackSources.length > 1 && (
+                        <button
+                          type="button"
+                          className="remove-source-button"
+                          onClick={() => setTrackSources((sources) => sources.filter((_, itemIndex) => itemIndex !== index))}
+                          aria-label={t.removeSourceBtn}
+                          title={t.removeSourceBtn}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="span-2" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                   {t.trackFileLabel}
@@ -1616,6 +1679,20 @@ function App() {
                           {track.ownerUsername ? `${t.uploadedBy}: ${track.ownerUsername} • ` : `${track.artist} • `}
                           {Math.floor(track.duration / 60)}m {track.duration % 60}s
                         </div>
+                        {!!track.sources?.length && (
+                          <div className="library-track-sources">
+                            {track.sources.map((source) => (
+                              <a
+                                href={source.url}
+                                key={`${source.label}-${source.url}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                ↗ {source.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {(username === 'admin' || track.ownerUsername?.toLowerCase() === username.toLowerCase()) && (
                         <button

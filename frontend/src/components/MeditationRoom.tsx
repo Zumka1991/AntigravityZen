@@ -958,6 +958,28 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             <div className="track-info">
               <h2>{getTrackTitle(roomState.activeTrack)}</h2>
               <p>by {roomState.activeTrack?.artist}</p>
+              {!!roomState.activeTrack?.sources?.length && (
+                <div className="meditation-sources" aria-label={t.meditationSourcesLabel}>
+                  <span>{t.meditationSourcesLabel}</span>
+                  <div>
+                    {roomState.activeTrack.sources.map((source) => (
+                      <a
+                        href={source.url}
+                        key={`${source.label}-${source.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {source.label}
+                        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 3h7v7" />
+                          <path d="M10 14 21 3" />
+                          <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                        </svg>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Pulsing Breathing Ring */}
