@@ -894,6 +894,8 @@ input[type="range"]:focus {
 }
 
 .track-info {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -911,17 +913,31 @@ input[type="range"]:focus {
 }
 
 .meditation-sources {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
   gap: 0.5rem 0.65rem;
-  margin-top: 0.3rem;
+  width: min(100%, 520px);
+  margin-top: 1rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 15px;
+  background: linear-gradient(135deg, rgba(10, 13, 24, 0.72), rgba(18, 22, 36, 0.5));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   font-size: 0.76rem;
 }
 
 .meditation-sources > span {
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .meditation-sources > div {
@@ -957,11 +973,13 @@ input[type="range"]:focus {
 /* The Breathing Ring Outer Glow */
 .visualizer-container {
   position: relative;
+  z-index: 1;
   width: 220px;
   height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .breathing-ring {
