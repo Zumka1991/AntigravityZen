@@ -14,11 +14,12 @@ interface GlobalChatProps {
   token: string;
   username: string;
   t: typeof translations.en;
+  onOpenProfile?: (username: string) => void;
 }
 
 const visibleMessageLimit = 200;
 
-export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
+export function GlobalChat({ apiBase, token, username, t, onOpenProfile }: GlobalChatProps) {
   const [messages, setMessages] = useState<GlobalChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +139,20 @@ export function GlobalChat({ apiBase, token, username, t }: GlobalChatProps) {
             return (
               <div key={message.id} className={`chat-message ${isSelf ? 'self' : ''}`}>
                 <div className="chat-msg-header">
-                  {!isSelf && <span style={{ fontWeight: 600 }}>{message.username}</span>}
+                  {!isSelf && (
+                    onOpenProfile ? (
+                      <button
+                        type="button"
+                        className="chat-username-link"
+                        onClick={() => onOpenProfile(message.username)}
+                        title={t.openProfileTitle}
+                      >
+                        {message.username}
+                      </button>
+                    ) : (
+                      <span style={{ fontWeight: 600 }}>{message.username}</span>
+                    )
+                  )}
                   <span>
                     {new Date(message.timestamp).toLocaleTimeString([], {
                       hour: '2-digit',

@@ -9,6 +9,7 @@ import { AboutPage } from './components/AboutPage';
 import { EventPlanner } from './components/EventPlanner';
 import type { MeditationEvent } from './components/EventPlanner';
 import { SocialHub } from './components/SocialHub';
+import { ProfileCard } from './components/ProfileCard';
 import { translations } from './translations';
 import type { Language } from './translations';
 import './App.css';
@@ -165,6 +166,8 @@ function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [requestedRoomId, setRequestedRoomId] = useState<string | null>(null);
   const [requestedEventId, setRequestedEventId] = useState<string | null>(null);
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
+  const [pendingDialog, setPendingDialog] = useState<string | null>(null);
   
   // WebSocket and real-time state
   const [roomState, setRoomState] = useState<any>(null);
@@ -350,7 +353,7 @@ function App() {
     }
   };
 
-  const clearInvitationTarget = (param: 'roomId' | 'eventId') => {
+  const clearInvitationTarget = (param: 'roomId' | 'eventId' | 'profile' | 'dm') => {
     const url = new URL(window.location.href);
     url.searchParams.delete(param);
     const search = url.searchParams.toString();
@@ -361,16 +364,52 @@ function App() {
     );
   };
 
+  const openProfileCard = (target: string) => {
+    if (!target) return;
+    setProfileUsername(target);
+    const url = new URL(window.location.href);
+    url.searchParams.set('profile', target);
+    const search = url.searchParams.toString();
+    window.history.replaceState(
+      {},
+      document.title,
+      `${url.pathname}${search ? `?${search}` : ''}${url.hash}`,
+    );
+  };
+
+  const closeProfileCard = () => {
+    setProfileUsername(null);
+    clearInvitationTarget('profile');
+  };
+
+  const openDirectMessage = (target: string) => {
+    if (!target) return;
+    setShowAbout(false);
+    setSocialTab('messages');
+    setShowSocial(true);
+    setPendingDialog(target);
+  };
+
   // Keep invitation targets in the URL and memory while the user signs in or registers.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomIdParam = params.get('roomId');
     const eventIdParam = params.get('eventId');
+    const profileParam = params.get('profile');
+    const dmParam = params.get('dm');
     if (roomIdParam) {
       setRequestedRoomId(roomIdParam);
     }
     if (eventIdParam) {
       setRequestedEventId(eventIdParam);
+    }
+    if (profileParam) {
+      setProfileUsername(profileParam);
+    }
+    if (dmParam) {
+      setPendingDialog(dmParam);
+      setSocialTab('messages');
+      setShowSocial(true);
     }
   }, []);
 
@@ -1075,10 +1114,19 @@ function App() {
             <div className="user-badge" style={{ gap: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-                <span>
+                <button
+                  type="button"
+                  className="user-badge-name"
+                  onClick={() => openProfileCard(username)}
+                  disabled={isGuest}
+                  title={isGuest
+                    ? (lang === 'ru' ? 'Зарегистрируйтесь, чтобы открыть профиль' : 'Register to view your profile')
+                    : (lang === 'ru' ? 'Открыть профиль' : 'Open profile')}
+                  aria-label={lang === 'ru' ? `Открыть профиль ${username}` : `Open ${username}'s profile`}
+                >
                   {username}
                   {isGuest && <small className="guest-label">{t.guestLabel}</small>}
-                </span>
+                </button>
               </div>
               {isGuest ? (
                 <button
@@ -1128,13 +1176,21 @@ function App() {
                   onClick={() => setMobileMenuOpen(false)}
                 />
                 <div className="mobile-menu-panel" id="mobile-main-menu">
-                  <div className="mobile-menu-user">
+                  <button
+                    type="button"
+                    className="mobile-menu-user mobile-menu-user-button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      if (!isGuest) openProfileCard(username);
+                    }}
+                    disabled={isGuest}
+                  >
                     <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
                     <div>
                       <strong>{username}</strong>
                       <span>{isGuest ? t.guestLabel : (lang === 'ru' ? 'Профиль ZenWorld' : 'ZenWorld profile')}</span>
                     </div>
-                  </div>
+                  </button>
 
                   <div className="mobile-menu-group">
                     <span>{lang === 'ru' ? 'Навигация' : 'Navigation'}</span>
@@ -1230,6 +1286,7 @@ function App() {
               onVoiceStart={handleVoiceStart}
               onVoiceStop={handleVoiceStop}
               onVoiceData={handleVoiceData}
+              onOpenProfile={openProfileCard}
             />
           ) : (
             <div className="glass-panel" style={{ padding: '3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', textAlign: 'center', minHeight: '300px' }}>
@@ -1254,7 +1311,12 @@ function App() {
             username={username}
             language={lang}
             initialTab={socialTab}
-            onBack={() => setShowSocial(false)}
+            initialDialog={pendingDialog}
+            onBack={() => {
+              setShowSocial(false);
+              setPendingDialog(null);
+              clearInvitationTarget('dm');
+            }}
             onUnreadChange={setUnreadMessages}
           />
         ) : showAbout ? (
@@ -1268,7 +1330,17 @@ function App() {
               </div>
               <div className="user-badge">
                 <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
-                <span>{username}</span>
+                <button
+                  type="button"
+                  className="user-badge-name"
+                  onClick={() => openProfileCard(username)}
+                  disabled={isGuest}
+                  title={isGuest
+                    ? (lang === 'ru' ? 'Зарегистрируйтесь, чтобы открыть профиль' : 'Register to view your profile')
+                    : (lang === 'ru' ? 'Открыть профиль' : 'Open profile')}
+                >
+                  {username}
+                </button>
               </div>
             </section>
             <EventPlanner
@@ -1305,10 +1377,28 @@ function App() {
               token={token}
               username={username}
               t={t}
+              onOpenProfile={openProfileCard}
             />
           </>
         )}
       </main>
+
+      {/* Profile card overlay — opened from any username click in the app. */}
+      {profileUsername && !isGuest && (
+        <ProfileCard
+          apiBase={API_BASE}
+          token={token}
+          viewerUsername={username}
+          language={lang}
+          username={profileUsername}
+          variant="modal"
+          onClose={closeProfileCard}
+          onWrite={(target) => {
+            closeProfileCard();
+            openDirectMessage(target);
+          }}
+        />
+      )}
 
       {showAuthModal && (
         <div className="modal-overlay auth-modal-overlay" onClick={() => setShowAuthModal(false)}>

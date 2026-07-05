@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Language } from '../translations';
+import { ProfileCard } from './ProfileCard';
 
 type Profile = {
   username: string;
@@ -34,6 +35,8 @@ type Props = {
   username: string;
   language: Language;
   initialTab: 'profiles' | 'messages';
+  /** Optional username to open a direct-message dialog with immediately. */
+  initialDialog?: string | null;
   onBack: () => void;
   onUnreadChange: (count: number) => void;
 };
@@ -54,6 +57,7 @@ export function SocialHub({
   username,
   language,
   initialTab,
+  initialDialog = null,
   onBack,
   onUnreadChange,
 }: Props) {
@@ -62,7 +66,7 @@ export function SocialHub({
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
-  const [activeDialog, setActiveDialog] = useState<string | null>(null);
+  const [activeDialog, setActiveDialog] = useState<string | null>(initialDialog);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
@@ -313,64 +317,23 @@ export function SocialHub({
             </div>
           </div>
 
-          <div className="glass-panel profile-detail" ref={profileDetailRef}>
+          <div ref={profileDetailRef}>
             {selectedProfile ? (
-              <>
-                <div className="profile-hero">
-                  <div className="profile-avatar">{selectedProfile.username.charAt(0).toUpperCase()}</div>
-                  <div>
-                    <span>{ru ? 'Профиль участника' : 'Member profile'}</span>
-                    <h2>{selectedProfile.username}</h2>
-                  </div>
-                </div>
-                <div className="profile-stats">
-                  <div><strong>{selectedProfile.hostedCount}</strong><span>{ru ? 'раз ведущий' : 'hosted'}</span></div>
-                  <div><strong>{selectedProfile.participatedCount}</strong><span>{ru ? 'раз участник' : 'joined'}</span></div>
-                  <div><strong>{selectedProfile.likesCount}</strong><span>{ru ? 'лайков' : 'likes'}</span></div>
-                </div>
-                <div className="profile-actions">
-                  {selectedProfile.username.toLowerCase() !== username.toLowerCase() ? (
-                    <>
-                      <button className="btn btn-primary" type="button" onClick={() => openDialog(selectedProfile.username)}>
-                        <span aria-hidden="true">✉</span> {ru ? 'Написать сообщение' : 'Send message'}
-                      </button>
-                      <button
-                        className={`btn profile-like ${selectedProfile.likedByMe ? 'liked' : ''}`}
-                        type="button"
-                        onClick={() => void toggleLike(selectedProfile)}
-                      >
-                        {selectedProfile.likedByMe ? '♥' : '♡'} {ru
-                          ? (selectedProfile.likedByMe ? 'Нравится' : 'Поставить лайк')
-                          : (selectedProfile.likedByMe ? 'Liked' : 'Like profile')}
-                      </button>
-                      <button
-                        className={`btn btn-secondary ignore-button ${selectedProfile.ignoredByMe ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => void setIgnored(selectedProfile.username, !selectedProfile.ignoredByMe)}
-                      >
-                        {selectedProfile.ignoredByMe
-                          ? (ru ? 'Перестать игнорировать' : 'Stop ignoring')
-                          : (ru ? 'Игнорировать' : 'Ignore')}
-                      </button>
-                    </>
-                  ) : (
-                    <div className="own-profile-note">
-                      <span aria-hidden="true">✓</span>
-                      <div>
-                        <strong>{ru ? 'Это ваш профиль' : 'This is your profile'}</strong>
-                        <small>{ru
-                          ? 'Лайки и личные сообщения доступны в профилях других участников.'
-                          : 'Likes and direct messages are available on other member profiles.'}</small>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
+              <ProfileCard
+                apiBase={apiBase}
+                token={token}
+                viewerUsername={username}
+                language={language}
+                username={selectedProfile.username}
+                variant="panel"
+              />
             ) : (
-              <div className="profile-placeholder">
-                <span>✦</span>
-                <h2>{ru ? 'Выберите профиль' : 'Choose a profile'}</h2>
-                <p>{ru ? 'Здесь появится статистика участника.' : 'Member statistics will appear here.'}</p>
+              <div className="glass-panel profile-detail profile-card-embedded">
+                <div className="profile-placeholder">
+                  <span>✦</span>
+                  <h2>{ru ? 'Выберите профиль' : 'Choose a profile'}</h2>
+                  <p>{ru ? 'Здесь появится статистика участника.' : 'Member statistics will appear here.'}</p>
+                </div>
               </div>
             )}
           </div>

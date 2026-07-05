@@ -27,6 +27,7 @@ interface MeditationRoomProps {
   onVoiceStart: () => void;
   onVoiceStop: () => void;
   onVoiceData: (arrayBuffer: ArrayBuffer) => void;
+  onOpenProfile?: (username: string) => void;
 }
 
 export const MeditationRoom: React.FC<MeditationRoomProps> = ({
@@ -47,6 +48,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   onVoiceStart,
   onVoiceStop,
   onVoiceData,
+  onOpenProfile,
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
@@ -1338,17 +1340,32 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             <button className="mobile-sheet-close" onClick={() => setMobilePanel(null)} aria-label={t.closeMobilePanel}>×</button>
           </div>
           <div className="member-list">
-            {roomState.clients.map((member) => (
-              <div key={member.id} className="member-item" style={{ background: member.id === clientId ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
-                <div className="user-avatar" style={{ background: member.isHost ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.08)', color: member.isHost ? '#06050e' : 'white' }}>
-                  {member.username.charAt(0).toUpperCase()}
+            {roomState.clients.map((member) => {
+              const isSelf = member.id === clientId;
+              return (
+                <div key={member.id} className="member-item" style={{ background: isSelf ? 'rgba(255, 255, 255, 0.02)' : 'transparent' }}>
+                  <div className="user-avatar" style={{ background: member.isHost ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.08)', color: member.isHost ? '#06050e' : 'white' }}>
+                    {member.username.charAt(0).toUpperCase()}
+                  </div>
+                  {onOpenProfile && !isSelf ? (
+                    <button
+                      type="button"
+                      className="member-name member-name-link"
+                      onClick={() => onOpenProfile(member.username)}
+                      style={{ fontWeight: 400 }}
+                      title={t.openProfileTitle}
+                    >
+                      {member.username}
+                    </button>
+                  ) : (
+                    <span className="member-name" style={{ fontWeight: isSelf ? 600 : 400 }}>
+                      {member.username} {isSelf && t.youTag}
+                    </span>
+                  )}
+                  {member.isHost && <span className="member-role">{t.hostTag}</span>}
                 </div>
-                <span className="member-name" style={{ fontWeight: member.id === clientId ? 600 : 400 }}>
-                  {member.username} {member.id === clientId && t.youTag}
-                </span>
-                {member.isHost && <span className="member-role">{t.hostTag}</span>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -1370,7 +1387,20 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                   return (
                     <div key={index} className={`chat-message ${isSelf ? 'self' : ''}`}>
                       <div className="chat-msg-header">
-                        {!isSelf && <span style={{ fontWeight: 600 }}>{msg.username}</span>}
+                        {!isSelf && (
+                          onOpenProfile ? (
+                            <button
+                              type="button"
+                              className="chat-username-link"
+                              onClick={() => msg.username && onOpenProfile(msg.username)}
+                              title={t.openProfileTitle}
+                            >
+                              {msg.username}
+                            </button>
+                          ) : (
+                            <span style={{ fontWeight: 600 }}>{msg.username}</span>
+                          )
+                        )}
                         <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <div className="chat-msg-bubble">
