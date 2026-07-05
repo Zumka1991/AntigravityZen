@@ -180,6 +180,13 @@ const (
 	botWaitMinSeconds    = 300 // 5 min
 	botWaitMaxSeconds    = 600 // 10 min
 	botWaitPreStartDelay = 600 * time.Millisecond
+	// Grace period AFTER the first human joins. Replaces the immediate
+	// "start" we used to fire the instant someone entered the room —
+	// a real host doesn't snap into the meditation the millisecond a
+	// visitor appears; they let the visitor settle in (volume, posture,
+	// headphones) for a bit before flipping the room to "playing".
+	botHumanJoinGraceMin = 30 // 30 sec
+	botHumanJoinGraceMax = 90 // 90 sec
 )
 
 // BotManager keeps the seeded community alive. It owns bot accounts, rotates
@@ -436,16 +443,32 @@ func (bm *BotManager) runHostBot(ctx context.Context, botUsername string) {
 	}()
 
 	waitMode := bm.rng.Float64() < botWaitModeChance
+	var humanArrived bool
 	if waitMode {
 		waitSeconds := botWaitMinSeconds + bm.rng.Intn(botWaitMaxSeconds-botWaitMinSeconds+1)
 		log.Printf("BotManager: %q enters wait mode in %s (%ds) until somebody joins", botUsername, roomID, waitSeconds)
 		select {
 		case <-humanJoined:
+			humanArrived = true
 			log.Printf("BotManager: %q start trigger: human joined %s", botUsername, roomID)
 		case <-time.After(time.Duration(waitSeconds) * time.Second):
 			log.Printf("BotManager: %q start trigger: wait timeout in %s", botUsername, roomID)
 		case <-ctx.Done():
 			return
+		}
+		// When a real human jumped in we deliberately hold the start for a
+		// beat so they have time to settle (close the tab they were looking
+		// at, put on headphones, lean back). 30-90 seconds feels about
+		// right — short enough not to feel stuck, long enough that the
+		// start isn't an immediate jolt on top of the room_state chime.
+		if humanArrived {
+			grace := botHumanJoinGraceMin + bm.rng.Intn(botHumanJoinGraceMax-botHumanJoinGraceMin+1)
+			log.Printf("BotManager: %q graceful pause %ds after human join in %s", botUsername, grace, roomID)
+			select {
+			case <-time.After(time.Duration(grace) * time.Second):
+			case <-ctx.Done():
+				return
+			}
 		}
 	} else {
 		// Allow a brief moment for the room_state handshake to propagate
