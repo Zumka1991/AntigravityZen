@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"meditation-app/handlers"
@@ -21,6 +24,7 @@ func main() {
 		log.Fatalf("Could not migrate legacy SQLite database: %v", err)
 	}
 	room.MigrateJSONToDB(db)
+	room.InitSettings()
 	room.InitTracks()
 	room.InitChat()
 	room.InitBackgrounds()
@@ -53,7 +57,24 @@ func main() {
 	if adminPassword == "" {
 		log.Fatal("ADMIN_PASSWORD environment variable is required")
 	}
-	authManager.EnsureAdminCreated(adminPassword)
+	adminUsername := os.Getenv("ADMIN_USERNAME")
+	if adminUsername == "" {
+		adminUsername = "admin"
+	}
+	authManager.EnsureAdminCreated(adminUsername, adminPassword)
+
+	botManager := room.NewBotManager(authManager, hub)
+	schedulerCtx, stopScheduler := context.WithCancel(context.Background())
+	defer stopScheduler()
+	botManager.Start(schedulerCtx)
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		log.Println("Shutting down bot scheduler")
+		stopScheduler()
+		botManager.Stop()
+	}()
 
 	// Set Gin mode
 	ginMode := os.Getenv("GIN_MODE")
@@ -109,6 +130,12 @@ func main() {
 	r.GET("/api/backgrounds", handlers.GetBackgroundsHandler(authManager))
 	r.POST("/api/backgrounds", handlers.AddBackgroundHandler(authManager))
 	r.DELETE("/api/backgrounds", handlers.DeleteBackgroundHandler(authManager))
+
+	// Admin-only bot management. Usernames equal to ADMIN_USERNAME (default:
+	// "admin") can read and flip the bot toggles. Tokens are validated like
+	// every other authenticated request.
+	r.GET("/api/admin/bots", handlers.GetBotSettingsHandler(authManager, botManager))
+	r.PUT("/api/admin/bots", handlers.UpdateBotSettingsHandler(authManager))
 
 	// WebSocket Route
 	r.GET("/ws", handlers.WSHandler(hub, authManager))

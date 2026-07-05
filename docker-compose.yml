@@ -24,11 +24,13 @@ services:
   backend:
     image: ghcr.io/${GHCR_OWNER:-zumka1991}/antigravityzen-backend:${IMAGE_TAG:-latest}
     environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       DATABASE_URL: postgres://${POSTGRES_USER:-meditation}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-meditation}?sslmode=disable
       GIN_MODE: release
       GOMEMLIMIT: 220MiB
       TZ: ${TZ:-Europe/Moscow}
+      BOT_SELF_URL: ${BOT_SELF_URL:-http://127.0.0.1:8080}
     volumes:
       - backend_data:/data
     depends_on:

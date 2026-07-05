@@ -16,6 +16,9 @@ type StoredUser struct {
 	Username     string `json:"username"`
 	PasswordHash string `json:"password_hash"`
 	Salt         string `json:"salt"`
+	// IsBot is an internal flag that is NEVER serialized to the client.
+	// Bots look exactly like human accounts in every public API surface.
+	IsBot bool `json:"-"`
 }
 
 // AuthManager управляет сессиями и пользователями с помощью БД.
@@ -74,12 +77,119 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 	hash := hashPassword(password, salt)
 
 	// Записываем в БД
-	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)", username, hash, salt)
+	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt, is_bot) VALUES (?, ?, ?, FALSE)", username, hash, salt)
 	if err != nil {
 		return "", err
 	}
 
 	return am.createSession(username, false)
+}
+
+// IsUserBot reports whether the named account is a bot. Safe to call without
+// the user existing - returns false in that case.
+func (am *AuthManager) IsUserBot(username string) bool {
+	if am == nil || am.db == nil || username == "" {
+		return false
+	}
+	var isBot bool
+	err := am.db.QueryRow("SELECT is_bot FROM users WHERE LOWER(username) = LOWER(?)", username).Scan(&isBot)
+	return err == nil && isBot
+}
+
+// ListBotUsernames returns every bot account, ordered by username.
+func (am *AuthManager) ListBotUsernames() ([]string, error) {
+	if am == nil || am.db == nil {
+		return nil, errors.New("auth manager is not initialized")
+	}
+	rows, err := am.db.Query("SELECT username FROM users WHERE is_bot = TRUE ORDER BY username")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+// CreateBotUser inserts a bot account if it doesn't exist yet. Each bot
+// receives a long random password; only the generated session token (see
+// EnsureBotSession) is used for outbound HTTP/WS calls.
+func (am *AuthManager) CreateBotUser(username string) error {
+	if am == nil || am.db == nil || username == "" {
+		return errors.New("auth manager is not initialized")
+	}
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return errors.New("username cannot be empty")
+	}
+	var exists bool
+	if err := am.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = LOWER(?))", username).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		// Promote to is_bot = TRUE in case the account existed without the flag.
+		_, err := am.db.Exec("UPDATE users SET is_bot = TRUE WHERE LOWER(username) = LOWER(?)", username)
+		return err
+	}
+	salt := generateSalt()
+	password := generateToken() // random, never reused or stored as plaintext
+	hash := hashPassword(password, salt)
+	_, err := am.db.Exec("INSERT INTO users (username, password_hash, salt, is_bot) VALUES (?, ?, ?, TRUE)", username, hash, salt)
+	return err
+}
+
+// EnsureBotSession returns a fresh, long-lived session token for the given
+// bot. New tokens are stored on each call; old tokens naturally expire after
+// sessionLifetime. We never expose bot tokens to a UI; they live only in the
+// in-memory BotManager.
+func (am *AuthManager) EnsureBotSession(username string) (string, error) {
+	if am == nil || am.db == nil || username == "" {
+		return "", errors.New("auth manager is not initialized")
+	}
+	token := generateToken()
+	expiresAt := time.Now().Add(sessionLifetime).Unix()
+	if _, err := am.db.Exec(
+		"INSERT INTO sessions (token, username, expires_at, is_guest) VALUES (?, ?, ?, FALSE)",
+		token, username, expiresAt,
+	); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// BotLastHostedAt returns the unix-millisecond timestamp of the bot's last
+// hosted meditation, or 0 if the bot hasn't hosted one yet.
+func (am *AuthManager) BotLastHostedAt(username string) (int64, error) {
+	if am == nil || am.db == nil || username == "" {
+		return 0, errors.New("auth manager is not initialized")
+	}
+	var ts int64
+	err := am.db.QueryRow(
+		"SELECT last_hosted_at FROM users WHERE LOWER(username) = LOWER(?)",
+		username,
+	).Scan(&ts)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return ts, err
+}
+
+// MarkBotHosted stamps the bot's last_hosted_at to the supplied unix-ms value.
+func (am *AuthManager) MarkBotHosted(username string, ts int64) error {
+	if am == nil || am.db == nil || username == "" {
+		return errors.New("auth manager is not initialized")
+	}
+	_, err := am.db.Exec(
+		"UPDATE users SET last_hosted_at = ? WHERE LOWER(username) = LOWER(?)",
+		ts, username,
+	)
+	return err
 }
 
 // Login аутентифицирует пользователя и возвращает сессионный токен
@@ -174,26 +284,41 @@ func (am *AuthManager) Logout(token string) {
 	_, _ = am.db.Exec("DELETE FROM sessions WHERE token = ?", token)
 }
 
-// EnsureAdminCreated проверяет наличие пользователя admin и создает его с паролем по умолчанию, если его нет
-func (am *AuthManager) EnsureAdminCreated(defaultPassword string) {
+// EnsureAdminCreated ensures that the configured admin account exists with the
+// given password. The admin's username is configurable via the
+// ADMIN_USERNAME env var (default: "admin"). The password comes from the
+// ADMIN_PASSWORD env var. The flag runs only on first deploy; existing admin
+// accounts keep working unchanged.
+func (am *AuthManager) EnsureAdminCreated(adminUsername, defaultPassword string) {
+	if adminUsername == "" {
+		adminUsername = "admin"
+	}
+	if defaultPassword == "" {
+		log.Println("Admin password is empty; skipping admin bootstrap")
+		return
+	}
 	var exists bool
-	err := am.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = 'admin')").Scan(&exists)
+	err := am.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = LOWER(?))", adminUsername).Scan(&exists)
 	if err != nil {
 		log.Printf("Error checking if admin user exists: %v", err)
 		return
 	}
 	if exists {
+		log.Printf("Admin user %q already exists", adminUsername)
 		return
 	}
 
 	salt := generateSalt()
 	hash := hashPassword(defaultPassword, salt)
 
-	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)", "admin", hash, salt)
+	_, err = am.db.Exec(
+		"INSERT INTO users (username, password_hash, salt, is_bot) VALUES (?, ?, ?, FALSE)",
+		adminUsername, hash, salt,
+	)
 	if err != nil {
 		log.Printf("Error creating default admin user: %v", err)
 	} else {
-		log.Println("Default admin user created successfully")
+		log.Printf("Default admin user %q created successfully", adminUsername)
 	}
 }
 

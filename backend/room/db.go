@@ -104,10 +104,16 @@ func InitDB(dsn string) *DB {
 		log.Fatalf("Failed to connect to %s: %v", dialect, err)
 	}
 
-	for _, query := range schemaQueries(dialect) {
-		if _, err := db.Exec(query); err != nil {
-			log.Fatalf("Failed to execute schema query %q: %v", query, err)
-		}
+	// Run all CREATE IF NOT EXISTS statements first; these must succeed.
+	if err := applySchema(db, schemaQueries(dialect)); err != nil {
+		log.Fatalf("Failed to bootstrap schema: %v", err)
+	}
+
+	// Idempotent migrations: best-effort. The is_bot column, for instance,
+	// already exists on fresh databases created by the new CREATE above; the
+	// ALTER only kicks in on legacy schemas created before bot support.
+	if err := applyMigrations(db, dialect); err != nil {
+		log.Fatalf("Failed to apply schema migrations: %v", err)
 	}
 
 	dbConn = db
@@ -137,7 +143,14 @@ func schemaQueries(dialect string) []string {
 		`CREATE TABLE IF NOT EXISTS users (
 			username TEXT PRIMARY KEY,
 			password_hash TEXT NOT NULL,
-			salt TEXT NOT NULL
+			salt TEXT NOT NULL,
+			is_bot BOOLEAN NOT NULL DEFAULT FALSE,
+			last_hosted_at BIGINT NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at BIGINT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			token TEXT PRIMARY KEY,
@@ -252,6 +265,45 @@ func schemaQueries(dialect string) []string {
 		`CREATE INDEX IF NOT EXISTS idx_direct_messages_dialog ON direct_messages(sender_username, recipient_username, id)`,
 		`CREATE INDEX IF NOT EXISTS idx_direct_messages_unread ON direct_messages(recipient_username, read_at, id)`,
 	}
+}
+
+// applySchema runs CREATE TABLE/INDEX statements verbatim. They must succeed;
+// the caller aborts startup if they fail because the rest of the application
+// depends on these structures.
+func applySchema(db *DB, statements []string) error {
+	for _, query := range statements {
+		if _, err := db.Exec(query); err != nil {
+			return fmt.Errorf("%w: %s", err, query)
+		}
+	}
+	return nil
+}
+
+// applyMigrations runs idempotent schema upgrades that should *not* crash the
+// server when they fail (e.g. duplicate-column errors on legacy sqlite files
+// that pre-date the is_bot column).
+func applyMigrations(db *DB, dialect string) error {
+	migrations := []string{}
+	if dialect == "postgres" {
+		migrations = append(migrations,
+			`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot BOOLEAN NOT NULL DEFAULT FALSE`,
+			`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_hosted_at BIGINT NOT NULL DEFAULT 0`,
+		)
+	} else {
+		// SQLite has no ADD COLUMN IF NOT EXISTS. CREATE TABLE above already
+		// produces the new shape for fresh databases; for legacy files we
+		// try the column add and silently ignore "duplicate column" errors.
+		migrations = append(migrations,
+			`ALTER TABLE users ADD COLUMN is_bot BOOLEAN NOT NULL DEFAULT FALSE`,
+			`ALTER TABLE users ADD COLUMN last_hosted_at BIGINT NOT NULL DEFAULT 0`,
+		)
+	}
+	for _, query := range migrations {
+		if _, err := db.Exec(query); err != nil {
+			log.Printf("Skipping migration %q: %v", query, err)
+		}
+	}
+	return nil
 }
 
 // MigrateJSONToDB imports data from the legacy JSON storage.

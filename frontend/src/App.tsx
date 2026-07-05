@@ -5,6 +5,7 @@ import type { MeditationBackground } from './components/RoomList';
 import { MeditationRoom } from './components/MeditationRoom';
 import { GlobalChat } from './components/GlobalChat';
 import { BackgroundManager } from './components/BackgroundManager';
+import { BotManager } from './components/BotManager';
 import { AboutPage } from './components/AboutPage';
 import { EventPlanner } from './components/EventPlanner';
 import type { MeditationEvent } from './components/EventPlanner';
@@ -52,6 +53,7 @@ function App() {
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [isGuest, setIsGuest] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => localStorage.getItem('zen_is_admin') === 'true');
   const [isCheckingToken, setIsCheckingToken] = useState(true);
   
   // Auth Form States
@@ -107,8 +109,9 @@ function App() {
     };
   }, [showAuthModal, showLogin]);
 
-  // Shared sound library states
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  // Sound library / admin dashboard states
+  const [showSoundLibrary, setShowSoundLibrary] = useState(false);
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showSocial, setShowSocial] = useState(false);
   const [socialTab, setSocialTab] = useState<'profiles' | 'messages'>('profiles');
@@ -203,9 +206,11 @@ function App() {
       localStorage.setItem('zen_token', data.token);
       localStorage.setItem('zen_username', data.username);
       localStorage.setItem('zen_is_guest', 'true');
+      localStorage.setItem('zen_is_admin', 'false');
       setToken(data.token);
       setUsername(data.username);
       setIsGuest(true);
+      setIsAdmin(false);
       return true;
     } catch (err) {
       console.error('Failed to start guest session:', err);
@@ -235,6 +240,9 @@ function App() {
             setUsername(data.username);
             setIsGuest(Boolean(data.isGuest));
             localStorage.setItem('zen_is_guest', String(Boolean(data.isGuest)));
+            const adminFlag = Boolean(data.isAdmin);
+            setIsAdmin(adminFlag);
+            localStorage.setItem('zen_is_admin', String(adminFlag));
           } else {
             localStorage.removeItem('zen_token');
             localStorage.removeItem('zen_username');
@@ -287,16 +295,18 @@ function App() {
       pageTitle = `${isRu ? 'Профили участников' : 'Member profiles'} | ZenWorld`;
     } else if (showSocial && socialTab === 'messages') {
       pageTitle = `${isRu ? 'Личные сообщения' : 'Direct messages'} | ZenWorld`;
-    } else if (showAdminPanel) {
+    } else if (showSoundLibrary) {
       pageTitle = `${t.adminAccessBtn} | ZenWorld`;
+    } else if (showAdminDashboard) {
+      pageTitle = `${t.adminDashboardTitle} | ZenWorld`;
     } else {
-      pageTitle = isRu 
-        ? 'ZenWorld — Онлайн-медитации в реальном времени и исцеление' 
+      pageTitle = isRu
+        ? 'ZenWorld — Онлайн-медитации в реальном времени и исцеление'
         : 'ZenWorld — Real-time Online Meditations & Healing';
     }
 
     document.title = pageTitle;
-  }, [activeRoom, showAbout, showSocial, socialTab, showAdminPanel, lang, t]);
+  }, [activeRoom, showAbout, showSocial, socialTab, showSoundLibrary, showAdminDashboard, lang, t]);
 
   // Fetch initial tracks and rooms when logged in
   const fetchRooms = async () => {
@@ -745,9 +755,11 @@ function App() {
       localStorage.setItem('zen_token', data.token);
       localStorage.setItem('zen_username', data.username);
       localStorage.setItem('zen_is_guest', 'false');
+      localStorage.setItem('zen_is_admin', String(Boolean(data.isAdmin)));
       setUsername(data.username);
       setToken(data.token);
       setIsGuest(false);
+      setIsAdmin(Boolean(data.isAdmin));
       setShowAuthModal(false);
       setAuthPassword('');
       setAuthError(null);
@@ -772,9 +784,11 @@ function App() {
     localStorage.removeItem('zen_token');
     localStorage.removeItem('zen_username');
     localStorage.removeItem('zen_is_guest');
+    localStorage.removeItem('zen_is_admin');
     setToken(null);
     setUsername('');
     setIsGuest(false);
+    setIsAdmin(false);
     setAuthUsername('');
     setAuthPassword('');
     setActiveRoom(null);
@@ -1102,12 +1116,23 @@ function App() {
             </>
           )}
           {!activeRoom && token && !isGuest && (
-            <button 
+            <button
               className="btn btn-quiet"
-              onClick={() => setShowAdminPanel(true)}
+              onClick={() => setShowSoundLibrary(true)}
             >
               <span className="desktop-menu-icon" aria-hidden="true">♫</span>
               {t.adminAccessBtn}
+            </button>
+          )}
+          {!activeRoom && token && !isGuest && isAdmin && (
+            <button
+              className="btn btn-quiet admin-dashboard-btn"
+              onClick={() => setShowAdminDashboard(true)}
+              aria-label={t.adminDashboardTitle}
+              title={t.adminDashboardTitle}
+            >
+              <span className="desktop-menu-icon" aria-hidden="true">⚙</span>
+              {t.adminDashboardBtn}
             </button>
           )}
           {!activeRoom && token && (
@@ -1222,10 +1247,18 @@ function App() {
                     </div>
                     {!isGuest && (
                       <button type="button" onClick={() => {
-                        setShowAdminPanel(true);
+                        setShowSoundLibrary(true);
                         setMobileMenuOpen(false);
                       }}>
                         <b>♫</b><span>{t.adminAccessBtn}</span>
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button type="button" onClick={() => {
+                        setShowAdminDashboard(true);
+                        setMobileMenuOpen(false);
+                      }}>
+                        <b>⚙</b><span>{t.adminDashboardBtn}</span>
                       </button>
                     )}
                   </div>
@@ -1477,8 +1510,8 @@ function App() {
         </div>
       )}
 
-      {/* Admin Panel Modal Overlay */}
-      {showAdminPanel && (
+      {/* Sound Library Modal — available to every logged-in user */}
+      {showSoundLibrary && (
         <div className="admin-overlay" style={{
           position: 'fixed',
           top: 0,
@@ -1513,10 +1546,10 @@ function App() {
                   {t.sharedLibraryDesc}
                 </p>
               </div>
-              <button 
-                className="btn btn-secondary" 
+              <button
+                className="btn btn-secondary"
                 onClick={() => {
-                  setShowAdminPanel(false);
+                  setShowSoundLibrary(false);
                   setAdminError(null);
                 }}
                 style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}
@@ -1785,7 +1818,7 @@ function App() {
                           </div>
                         )}
                       </div>
-                      {(username === 'admin' || track.ownerUsername?.toLowerCase() === username.toLowerCase()) && (
+                      {(isAdmin || track.ownerUsername?.toLowerCase() === username.toLowerCase()) && (
                         <button
                           className="btn"
                           onClick={() => handleDeleteTrack(track.id)}
@@ -1808,16 +1841,64 @@ function App() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            {username === 'admin' && token && (
-              <BackgroundManager
-                apiBase={API_BASE}
-                token={token}
-                backgrounds={backgrounds}
-                onChanged={fetchBackgrounds}
-                t={t}
-              />
-            )}
+      {/* Admin Dashboard Modal — admin only */}
+      {showAdminDashboard && isAdmin && token && (
+        <div className="admin-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 4, 15, 0.75)',
+          backdropFilter: 'blur(15px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 100,
+          padding: '1.5rem'
+        }}>
+          <div className="glass-panel admin-panel" style={{
+            width: '100%',
+            maxWidth: '650px',
+            padding: '2.5rem',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2rem',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <div className="admin-panel-header">
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-heading)', marginBottom: '0.35rem' }}>
+                  {t.adminDashboardTitle}
+                </h2>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                  {t.adminDashboardDesc}
+                </p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowAdminDashboard(false)}
+                style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}
+              >
+                {t.closeBtn}
+              </button>
+            </div>
+
+            <BotManager apiBase={API_BASE} token={token} t={t} />
+
+            <BackgroundManager
+              apiBase={API_BASE}
+              token={token}
+              backgrounds={backgrounds}
+              onChanged={fetchBackgrounds}
+              t={t}
+            />
           </div>
         </div>
       )}

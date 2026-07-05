@@ -31,6 +31,7 @@ func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
 					"username": username,
 					"token":    savedToken,
 					"isGuest":  true,
+					"isAdmin":  false,
 				})
 				return
 			}
@@ -51,6 +52,7 @@ func GuestHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			"username": username,
 			"token":    token,
 			"isGuest":  true,
+			"isAdmin":  false,
 		})
 	}
 }
@@ -123,6 +125,7 @@ func RegisterHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			"username": strings.TrimSpace(payload.Username),
 			"token":    token,
 			"isGuest":  false,
+			"isAdmin":  strings.EqualFold(strings.TrimSpace(payload.Username), configuredAdminUsername()),
 		})
 	}
 }
@@ -155,6 +158,7 @@ func LoginHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			"username": username,
 			"token":    token,
 			"isGuest":  false,
+			"isAdmin":  strings.EqualFold(username, configuredAdminUsername()),
 		})
 	}
 }
@@ -180,6 +184,7 @@ func VerifyHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			"valid":    true,
 			"username": username,
 			"isGuest":  isGuest,
+			"isAdmin":  strings.EqualFold(username, configuredAdminUsername()),
 		})
 	}
 }
