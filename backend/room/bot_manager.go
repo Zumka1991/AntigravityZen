@@ -169,13 +169,16 @@ const (
 	// this window. Spectator joins don't count, so individual bots can keep
 	// drifting through other rooms as participants.
 	botDailyHostLimit = 24 * time.Hour
-	// Probability that a freshly created room sits in "lobby" / "waiting for
-	// host" mode for a few minutes before the host bot sends the start
-	// command. Mirrors what a real person looks like — sometimes you open a
-	// room and tab over to make tea before going.
-	botWaitModeChance    = 0.35
-	botWaitMinSeconds    = 180 // 3 min
-	botWaitMaxSeconds    = 720 // 12 min
+	// Lobby wait: every freshly created bot room sits in "lobby" /
+	// "waiting for host" mode for a few minutes before the host bot sends
+	// the start command. Mirrors what a real person looks like — you open
+	// a room, set a few things up, then go once somebody joins (or the
+	// timer runs out). The wait window is fixed at 5–10 minutes; if a
+	// real user enters during this window the bot kicks off immediately,
+	// otherwise it starts the meditation on its own.
+	botWaitModeChance    = 1.0
+	botWaitMinSeconds    = 300 // 5 min
+	botWaitMaxSeconds    = 600 // 10 min
 	botWaitPreStartDelay = 600 * time.Millisecond
 )
 
