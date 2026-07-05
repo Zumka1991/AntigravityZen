@@ -294,8 +294,6 @@ export function SocialHub({
     setContextMenu({ messageId, x, y });
   };
 
-  const closeContextMenu = () => setContextMenu(null);
-
   const handleMessageContextMenu = (event: ReactMouseEvent, messageId: number) => {
     event.preventDefault();
     openContextMenu(messageId, event.clientX, event.clientY);
