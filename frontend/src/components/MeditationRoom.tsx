@@ -2,6 +2,60 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { RoomInfo, Track } from './RoomList';
 import type { translations } from '../translations';
 
+type BreathPhase = 'inhale' | 'hold-in' | 'exhale' | 'hold-out';
+
+type BreathPattern = {
+  id: string;
+  label: string;
+  hint: { ru: string; en: string };
+  inhale: number;
+  holdIn: number;
+  exhale: number;
+  holdOut: number;
+};
+
+const BREATH_PATTERNS: BreathPattern[] = [
+  { id: '478', label: '4-7-8', hint: { ru: 'Сон, расслабление', en: 'Sleep & relaxation' }, inhale: 4, holdIn: 7, exhale: 8, holdOut: 0 },
+  { id: 'box', label: 'Box', hint: { ru: 'Баланс, концентрация', en: 'Balance & focus' }, inhale: 4, holdIn: 4, exhale: 4, holdOut: 4 },
+  { id: 'coherent', label: '5-5', hint: { ru: 'Спокойный ритм', en: 'Steady rhythm' }, inhale: 5, holdIn: 0, exhale: 5, holdOut: 0 },
+  { id: 'resonance', label: '4-6', hint: { ru: 'Снятие тревоги', en: 'Anxiety relief' }, inhale: 4, holdIn: 0, exhale: 6, holdOut: 0 },
+  { id: 'calm', label: '6-2-7', hint: { ru: 'Глубокое расслабление', en: 'Deep relaxation' }, inhale: 6, holdIn: 2, exhale: 7, holdOut: 0 },
+];
+
+const BREATH_SCALE_MAX = 1.75;
+const BREATH_SCALE_MIN = 1.0;
+const BREATH_SCALE_RANGE = BREATH_SCALE_MAX - BREATH_SCALE_MIN;
+
+const breathPhaseColors: Record<BreathPhase, { ring: string; glow: string; text: string }> = {
+  inhale:  { ring: 'rgba(45, 212, 191, 0.32)',  glow: 'rgba(45, 212, 191, 0.18)',  text: 'var(--color-secondary)' },
+  'hold-in':  { ring: 'rgba(45, 212, 191, 0.42)',  glow: 'rgba(45, 212, 191, 0.28)',  text: 'var(--color-secondary)' },
+  exhale: { ring: 'rgba(167, 139, 250, 0.32)', glow: 'rgba(167, 139, 250, 0.18)', text: 'var(--color-primary)' },
+  'hold-out': { ring: 'rgba(167, 139, 250, 0.18)', glow: 'rgba(167, 139, 250, 0.08)', text: 'var(--color-primary)' },
+};
+
+function computeBreathFrame(elapsedSec: number, pattern: BreathPattern): { phase: BreathPhase; scale: number } {
+  const total = pattern.inhale + pattern.holdIn + pattern.exhale + pattern.holdOut;
+  if (total <= 0) {
+    return { phase: 'inhale', scale: BREATH_SCALE_MIN };
+  }
+  const ct = ((elapsedSec % total) + total) % total;
+
+  if (pattern.inhale > 0 && ct < pattern.inhale) {
+    const progress = ct / pattern.inhale;
+    return { phase: 'inhale', scale: BREATH_SCALE_MIN + progress * BREATH_SCALE_RANGE };
+  }
+  const afterInhale = ct - pattern.inhale;
+  if (pattern.holdIn > 0 && afterInhale < pattern.holdIn) {
+    return { phase: 'hold-in', scale: BREATH_SCALE_MAX };
+  }
+  const afterHoldIn = afterInhale - pattern.holdIn;
+  if (pattern.exhale > 0 && afterHoldIn < pattern.exhale) {
+    const progress = afterHoldIn / pattern.exhale;
+    return { phase: 'exhale', scale: BREATH_SCALE_MAX - progress * BREATH_SCALE_RANGE };
+  }
+  return { phase: 'hold-out', scale: BREATH_SCALE_MIN };
+}
+
 interface Message {
   type: string;
   username?: string;
@@ -20,6 +74,7 @@ interface MeditationRoomProps {
   onStopMeditation: () => void;
   onLeaveRoom: () => void;
   t: typeof translations.en;
+  language: 'ru' | 'en';
   voiceNarrator: string | null;
   voiceFileUrl: string | null;
   isVoiceStatic?: boolean;
@@ -49,13 +104,18 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   onVoiceStop,
   onVoiceData,
   onOpenProfile,
+  language,
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
-  const [breathPhase, setBreathPhase] = useState<'inhale' | 'exhale'>('inhale');
+  const [breathPhase, setBreathPhase] = useState<'inhale' | 'hold-in' | 'exhale' | 'hold-out'>('inhale');
   const [breathScale, setBreathScale] = useState(1.0);
+  const [breathPatternId, setBreathPatternId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'coherent';
+    return window.localStorage.getItem('zenworld.breathPattern') ?? 'coherent';
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'members' | 'chat' | null>(null);
@@ -801,28 +861,19 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
       if (isPlaying && roomState.startedAt) {
         const clientTimeNow = Date.now();
         const currentServerTime = clientTimeNow + serverOffsetRef.current;
-        
+
         const elapsedMs = currentServerTime - roomState.startedAt;
         const elapsedSec = elapsedMs / 1000;
-        
+
         const remaining = Math.max(0, roomState.duration - elapsedSec);
         setTimeRemaining(remaining);
 
-        // Breathing calculations (5 seconds inhale, 5 seconds exhale)
-        const breathCycle = 10; // total 10s cycle
-        const cycleTime = elapsedSec % breathCycle;
-        
-        if (cycleTime < 5) {
-          setBreathPhase('inhale');
-          // Scale from 1.0 to 1.75
-          const progress = cycleTime / 5;
-          setBreathScale(1.0 + progress * 0.75);
-        } else {
-          setBreathPhase('exhale');
-          // Scale from 1.75 down to 1.0
-          const progress = (cycleTime - 5) / 5;
-          setBreathScale(1.75 - progress * 0.75);
-        }
+        // Breathing phase & scale based on selected pattern.
+        const pattern =
+          BREATH_PATTERNS.find((p) => p.id === breathPatternId) ?? BREATH_PATTERNS[0];
+        const { phase, scale } = computeBreathFrame(elapsedSec, pattern);
+        setBreathPhase(phase);
+        setBreathScale(scale);
       } else {
         setTimeRemaining(0);
         setBreathScale(1.0);
@@ -836,7 +887,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isPlaying, roomState.startedAt, roomState.duration]);
+  }, [isPlaying, roomState.startedAt, roomState.duration, breathPatternId]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -964,19 +1015,19 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
             {/* Pulsing Breathing Ring */}
             <div className="visualizer-container">
-              <div 
-                className="breathing-ring" 
-                style={{ 
-                  transform: `scale(${breathScale})`, 
-                  borderColor: breathPhase === 'inhale' ? 'rgba(45, 212, 191, 0.25)' : 'rgba(167, 139, 250, 0.25)',
-                  boxShadow: breathPhase === 'inhale' ? '0 0 30px rgba(45, 212, 191, 0.15)' : '0 0 30px rgba(167, 139, 250, 0.15)'
+              <div
+                className="breathing-ring"
+                style={{
+                  transform: `scale(${breathScale})`,
+                  borderColor: breathPhaseColors[breathPhase].ring,
+                  boxShadow: `0 0 30px ${breathPhaseColors[breathPhase].glow}`,
                 }}
               />
-              <div 
+              <div
                 className="breathing-core"
                 style={{
                   transform: `scale(${1 + (breathScale - 1) * 0.3})`,
-                  background: breathPhase === 'inhale' 
+                  background: breathPhase === 'inhale' || breathPhase === 'hold-in'
                     ? 'linear-gradient(135deg, var(--color-secondary) 0%, var(--color-primary) 100%)'
                     : 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%)',
                 }}
@@ -988,8 +1039,41 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             </div>
 
             {/* Breath Instruction Prompt */}
-            <div className="breath-prompt" style={{ color: breathPhase === 'inhale' ? 'var(--color-secondary)' : 'var(--color-primary)' }}>
-              {breathPhase === 'inhale' ? t.breatheIn : t.breatheOut}
+            <div
+              className="breath-prompt"
+              style={{ color: breathPhaseColors[breathPhase].text }}
+            >
+              {breathPhase === 'inhale' && t.breatheIn}
+              {breathPhase === 'hold-in' && t.holdIn}
+              {breathPhase === 'exhale' && t.breatheOut}
+              {breathPhase === 'hold-out' && t.holdOut}
+            </div>
+
+            {/* Breath Pattern Picker */}
+            <div className="breath-pattern-picker" role="radiogroup" aria-label={t.breathPattern}>
+              {BREATH_PATTERNS.map((pattern) => {
+                const active = pattern.id === breathPatternId;
+                return (
+                  <button
+                    key={pattern.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`breath-pattern-pill${active ? ' active' : ''}`}
+                    onClick={() => {
+                      setBreathPatternId(pattern.id);
+                      try {
+                        window.localStorage.setItem('zenworld.breathPattern', pattern.id);
+                      } catch {
+                        // localStorage может быть недоступен (приватный режим) — игнор
+                      }
+                    }}
+                    title={(language === 'ru' ? pattern.hint.ru : pattern.hint.en) + ` (${pattern.label})`}
+                  >
+                    {pattern.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Playback Controls Row */}

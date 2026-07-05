@@ -1279,6 +1279,7 @@ function App() {
               onStopMeditation={handleStopMeditation}
               onLeaveRoom={handleLeaveRoom}
               t={t}
+              language={lang}
               voiceNarrator={voiceNarrator}
               voiceFileUrl={voiceFileUrl}
               isVoiceStatic={isVoiceStatic}
