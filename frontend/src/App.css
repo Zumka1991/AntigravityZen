@@ -1055,18 +1055,51 @@
 }
 
 .dialog-ignore {
-  padding: 0.45rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
   border: 1px solid rgba(248, 113, 113, 0.25);
   border-radius: 9px;
   background: transparent;
   color: #fca5a5;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dialog-ignore:hover {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.dialog-ignore:focus-visible {
+  outline: 2px solid rgba(248, 113, 113, 0.6);
+  outline-offset: 2px;
+}
+
+.dialog-ignore svg {
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .dialog-ignore.active,
 .ignore-button.active {
   border-color: rgba(167, 139, 250, 0.35);
   color: #c4b5fd;
+}
+
+.dialog-ignore.active:hover {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+.dialog-ignore.active:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.6);
+  outline-offset: 2px;
 }
 
 .dialog-messages {
@@ -1082,6 +1115,13 @@
 .direct-message {
   max-width: min(75%, 560px);
   align-self: flex-start;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.direct-message:hover {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .direct-message.own {
@@ -1128,6 +1168,119 @@
 
 .direct-message-meta button:hover {
   text-decoration: underline;
+}
+
+.message-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.message-menu-trigger svg {
+  flex-shrink: 0;
+}
+
+.direct-message:hover .message-menu-trigger,
+.direct-message:focus-within .message-menu-trigger,
+.message-menu-trigger:focus-visible {
+  opacity: 1;
+}
+
+.message-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+}
+
+.message-menu-trigger:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.6);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .message-menu-trigger {
+    opacity: 0.65;
+  }
+}
+
+.message-context-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(20, 18, 32, 0.96);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: messageContextMenuIn 0.12s ease-out;
+}
+
+@keyframes messageContextMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-context-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.message-context-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.message-context-menu-item:hover,
+.message-context-menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  outline: none;
+}
+
+.message-context-menu-item.danger {
+  color: #fca5a5;
+}
+
+.message-context-menu-item.danger svg {
+  opacity: 0.9;
+}
+
+.message-context-menu-item.danger:hover,
+.message-context-menu-item.danger:focus-visible {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
 }
 
 .dialog-compose {

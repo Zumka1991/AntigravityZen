@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react';
 import type { Language } from '../translations';
 import { ProfileCard } from './ProfileCard';
 
@@ -73,6 +73,17 @@ export function SocialHub({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<
+    | {
+        messageId: number;
+        x: number;
+        y: number;
+      }
+    | null
+  >(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const profileDetailRef = useRef<HTMLDivElement | null>(null);
 
   const unreadTotal = useMemo(
@@ -138,6 +149,61 @@ export function SocialHub({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages]);
+
+  // Закрытие контекстного меню при смене диалога и при unmount.
+  useEffect(() => {
+    setContextMenu(null);
+  }, [activeDialog]);
+
+  useEffect(
+    () => () => {
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    },
+    [],
+  );
+
+  // Корректировка позиции меню — не вылезать за границы экрана.
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return;
+    const rect = contextMenuRef.current.getBoundingClientRect();
+    const padding = 8;
+    let { x, y } = contextMenu;
+    if (x + rect.width + padding > window.innerWidth) {
+      x = Math.max(padding, window.innerWidth - rect.width - padding);
+    }
+    if (y + rect.height + padding > window.innerHeight) {
+      y = Math.max(padding, window.innerHeight - rect.height - padding);
+    }
+    if (x < padding) x = padding;
+    if (y < padding) y = padding;
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu({ ...contextMenu, x, y });
+    }
+  }, [contextMenu]);
+
+  // Закрытие по клику/тачу вне меню и по Escape.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (target && contextMenuRef.current?.contains(target)) return;
+      setContextMenu(null);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null);
+    };
+    const id = window.setTimeout(() => {
+      document.addEventListener('mousedown', handlePointerDown);
+      document.addEventListener('touchstart', handlePointerDown);
+      document.addEventListener('keydown', handleKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [contextMenu]);
 
   const openProfile = (profile: Profile) => {
     setSelectedProfile(profile);
@@ -223,6 +289,79 @@ export function SocialHub({
     setMessages((current) => current.filter((message) => message.id !== messageID));
     await loadConversations();
   };
+
+  const openContextMenu = (messageId: number, x: number, y: number) => {
+    setContextMenu({ messageId, x, y });
+  };
+
+  const closeContextMenu = () => setContextMenu(null);
+
+  const handleMessageContextMenu = (event: ReactMouseEvent, messageId: number) => {
+    event.preventDefault();
+    openContextMenu(messageId, event.clientX, event.clientY);
+  };
+
+  const handleMessageClick = (event: ReactMouseEvent, messageId: number) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button')) return;
+    if (window.getSelection()?.toString()) return;
+    openContextMenu(messageId, event.clientX, event.clientY);
+  };
+
+  const handleMessageTouchStart = (event: ReactTouchEvent, messageId: number) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    touchTimerRef.current = setTimeout(() => {
+      openContextMenu(messageId, touch.clientX, touch.clientY);
+    }, 500);
+  };
+
+  const handleMessageTouchMove = (event: ReactTouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    if (Math.hypot(dx, dy) > 10 && touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+  };
+
+  const handleMessageTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+  };
+
+  const copyMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        // ignore — пользователь увидит, что меню закрылось
+      }
+      document.body.removeChild(ta);
+    }
+    setContextMenu(null);
+  };
+
+  const contextMessage = contextMenu
+    ? messages.find((m) => m.id === contextMenu.messageId)
+    : null;
+  const contextIsOwn = !!contextMessage &&
+    contextMessage.sender.toLowerCase() === username.toLowerCase();
 
   const changeTab = (next: 'profiles' | 'messages') => {
     setTab(next);
@@ -368,28 +507,95 @@ export function SocialHub({
                     className={`dialog-ignore ${activeIgnored ? 'active' : ''}`}
                     type="button"
                     onClick={() => void setIgnored(activeDialog, !activeIgnored)}
-                  >
-                    {activeIgnored
+                    title={activeIgnored
+                      ? (ru ? 'Снять игнор' : 'Unignore')
+                      : (ru ? 'Игнорировать пользователя' : 'Ignore user')}
+                    aria-label={activeIgnored
                       ? (ru ? 'Снять игнор' : 'Unignore')
                       : (ru ? 'Игнорировать' : 'Ignore')}
+                  >
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      {activeIgnored ? (
+                        <>
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </>
+                      ) : (
+                        <>
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                          <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                        </>
+                      )}
+                    </svg>
+                    <span>{activeIgnored
+                      ? (ru ? 'Снять игнор' : 'Unignore')
+                      : (ru ? 'Игнорировать' : 'Ignore')}</span>
                   </button>
                 </div>
                 <div className="dialog-messages" aria-live="polite">
                   {messages.map((message) => {
                     const own = message.sender.toLowerCase() === username.toLowerCase();
                     return (
-                      <div key={message.id} className={`direct-message ${own ? 'own' : ''}`}>
+                      <div
+                        key={message.id}
+                        className={`direct-message ${own ? 'own' : ''}`}
+                        onClick={(event) => handleMessageClick(event, message.id)}
+                        onContextMenu={(event) => handleMessageContextMenu(event, message.id)}
+                        onTouchStart={(event) => handleMessageTouchStart(event, message.id)}
+                        onTouchMove={handleMessageTouchMove}
+                        onTouchEnd={handleMessageTouchEnd}
+                        onTouchCancel={handleMessageTouchEnd}
+                      >
                         <p>{message.text}</p>
                         <span className="direct-message-meta">
                           <span>
                             {formatTime(message.createdAt, language)}
                             {own && ` · ${message.readAt ? (ru ? 'прочитано' : 'read') : (ru ? 'доставлено' : 'delivered')}`}
                           </span>
-                          {own && (
-                            <button type="button" onClick={() => void deleteMessage(message.id)}>
-                              {ru ? 'Удалить' : 'Delete'}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="message-menu-trigger"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              openContextMenu(
+                                message.id,
+                                rect.right - 4,
+                                rect.bottom + 4,
+                              );
+                            }}
+                            title={ru ? 'Действия' : 'Actions'}
+                            aria-label={ru ? 'Действия с сообщением' : 'Message actions'}
+                            aria-haspopup="menu"
+                          >
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <circle cx="12" cy="5" r="1" />
+                              <circle cx="12" cy="12" r="1" />
+                              <circle cx="12" cy="19" r="1" />
+                            </svg>
+                          </button>
                         </span>
                       </div>
                     );
@@ -429,6 +635,68 @@ export function SocialHub({
                 <span>✉</span>
                 <h2>{ru ? 'Выберите диалог' : 'Choose a conversation'}</h2>
                 <p>{ru ? 'Или откройте профиль и напишите человеку.' : 'Or open a profile and message someone.'}</p>
+              </div>
+            )}
+            {contextMenu && contextMessage && (
+              <div
+                ref={contextMenuRef}
+                className="message-context-menu"
+                role="menu"
+                style={{ top: contextMenu.y, left: contextMenu.x }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="message-context-menu-item"
+                  onClick={() => void copyMessage(contextMessage.text)}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <span>{ru ? 'Скопировать текст' : 'Copy text'}</span>
+                </button>
+                {contextIsOwn && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="message-context-menu-item danger"
+                    onClick={() => {
+                      setContextMenu(null);
+                      void deleteMessage(contextMessage.id);
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    <span>{ru ? 'Удалить' : 'Delete'}</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
