@@ -156,24 +156,6 @@ export function SocialHub({
     setMessages([]);
   };
 
-  const toggleLike = async (profile: Profile) => {
-    setError(null);
-    const response = await fetch(`${apiBase}/profiles/${encodeURIComponent(profile.username)}/like`, {
-      method: 'POST',
-      headers: authHeaders(token),
-      body: JSON.stringify({ liked: !profile.likedByMe }),
-    });
-    if (!response.ok) {
-      setError(ru ? 'Не удалось поставить отметку' : 'Could not update like');
-      return;
-    }
-    const updated: Profile = await response.json();
-    setProfiles((current) => current.map((item) => (
-      item.username === updated.username ? updated : item
-    )));
-    setSelectedProfile(updated);
-  };
-
   const setIgnored = async (other: string, ignored: boolean) => {
     if (ignored && !window.confirm(ru
       ? `Игнорировать пользователя ${other}? Вы не сможете писать друг другу.`
