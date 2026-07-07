@@ -184,6 +184,10 @@ func (h *Hub) LoadPersistentRooms() error {
 			Status:       status,
 			Duration:     duration,
 			StartedAt:    startedAt,
+			// CreatedAt isn't persisted in the rooms table; rooms loaded
+			// after a server restart treat the load moment as their
+			// creation time so the lobby stays ordered sensibly.
+			CreatedAt:    now,
 			PasswordHash: passwordHash,
 		}
 		if activeTrackID.Valid {

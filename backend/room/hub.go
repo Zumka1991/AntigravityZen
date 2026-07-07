@@ -96,6 +96,7 @@ type Room struct {
 	Background     *MeditationBackground
 	Duration       int   // in seconds
 	StartedAt      int64 // timestamp in ms
+	CreatedAt      int64 // timestamp in ms — when the room first appeared in the hub
 	VoiceFile      *os.File
 	VoiceFilePath  string
 	VoiceStartedAt int64 // Unix timestamp in ms
@@ -162,6 +163,7 @@ func (h *Hub) Run() {
 					VoiceTrack:   voiceTrack,
 					Background:   background,
 					Duration:     duration,
+					CreatedAt:    time.Now().UnixMilli(),
 					PasswordHash: h.PendingPasswords[client.RoomID],
 				}
 				delete(h.PendingPasswords, client.RoomID)

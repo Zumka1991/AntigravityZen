@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"sort"
 
 	"meditation-app/room"
 
@@ -23,6 +24,7 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 			ActiveTrack *room.Track                `json:"activeTrack,omitempty"`
 			Background  *room.MeditationBackground `json:"background,omitempty"`
 			IsProtected bool                       `json:"isProtected"`
+			CreatedAt   int64                      `json:"createdAt"`
 		}
 
 		rooms := make([]RoomInfo, 0, len(hub.Rooms))
@@ -37,9 +39,17 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 				ActiveTrack: rm.ActiveTrack,
 				Background:  rm.Background,
 				IsProtected: len(rm.PasswordHash) > 0,
+				CreatedAt:   rm.CreatedAt,
 			})
 			rm.Mutex.RUnlock()
 		}
+
+		// Newest rooms first — Go map iteration order is unstable, so the
+		// lobby used to reshuffle on every poll. Stable sort by CreatedAt
+		// desc keeps the order consistent across refreshes.
+		sort.SliceStable(rooms, func(i, j int) bool {
+			return rooms[i].CreatedAt > rooms[j].CreatedAt
+		})
 
 		c.JSON(http.StatusOK, rooms)
 	}

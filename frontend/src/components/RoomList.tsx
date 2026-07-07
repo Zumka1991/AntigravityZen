@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { translations } from '../translations';
 
 export interface Track {
@@ -34,6 +34,7 @@ export interface RoomInfo {
   activeTrack?: Track;
   background?: MeditationBackground;
   isProtected: boolean;
+  createdAt?: number;
 }
 
 interface RoomListProps {
@@ -84,6 +85,33 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [openCreationSection, setOpenCreationSection] = useState<'sound' | 'background' | 'voice' | null>('sound');
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Tick once a minute so the "X min ago" labels stay fresh without
+  // re-rendering the whole lobby every second.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // Newest rooms first. The backend already sorts by createdAt desc, but
+  // doing it client-side too keeps the order stable if the API ever
+  // changes shape (and protects against stale prop arrays).
+  const sortedRooms = useMemo(() => {
+    return [...rooms].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  }, [rooms]);
+
+  const formatCreatedAgo = (createdAt: number | undefined): string => {
+    if (!createdAt) return '';
+    const diffMs = Math.max(0, now - createdAt);
+    const diffMin = Math.floor(diffMs / 60_000);
+    if (diffMin < 1) return t.createdAgoJustNow;
+    if (diffMin < 60) return t.createdAgoMinutes.replace('{n}', String(diffMin));
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return t.createdAgoHours.replace('{n}', String(diffHours));
+    const diffDays = Math.floor(diffHours / 24);
+    return t.createdAgoDays.replace('{n}', String(diffDays));
+  };
 
   const formatDurationText = (seconds: number) => {
     if (seconds < 60) {
@@ -230,7 +258,7 @@ export const RoomList: React.FC<RoomListProps> = ({
       </div>
 
       {/* Rooms Grid */}
-      {rooms.length === 0 ? (
+      {sortedRooms.length === 0 ? (
         <div className="glass-panel empty-state">
           <div className="empty-state-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
@@ -242,7 +270,7 @@ export const RoomList: React.FC<RoomListProps> = ({
         </div>
       ) : (
         <div className="rooms-grid">
-          {rooms.map((room) => (
+          {sortedRooms.map((room) => (
             <div key={room.id} className="room-card glass-panel">
               <div className="room-card-header">
                 <h3>{room.name}</h3>
@@ -266,9 +294,17 @@ export const RoomList: React.FC<RoomListProps> = ({
               </div>
 
               <div className="room-card-footer">
-                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                  {room.status === 'playing' ? t.meditationInProgress : t.waitingForHost}
-                </span>
+                <div className="room-card-footer-meta">
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                    {room.status === 'playing' ? t.meditationInProgress : t.waitingForHost}
+                  </span>
+                  {room.createdAt ? (
+                    <span className="room-created-ago" title={t.createdLabel} style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                      <span>{t.createdLabel}: {formatCreatedAgo(room.createdAt)}</span>
+                    </span>
+                  ) : null}
+                </div>
                 <button
                   className="btn btn-primary"
                   onClick={() => handleJoin(room)}
