@@ -3199,9 +3199,15 @@ label {
   border-radius: var(--radius-lg);
 }
 
-.room-card:hover {
+.room-card:not(.status-lobby) {
+  opacity: 0.62;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.room-card:not(.status-lobby):hover {
+  opacity: 0.85;
   transform: translateY(-2px);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
 }
 
 .room-card.status-lobby {
@@ -3935,7 +3941,8 @@ label {
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               background 0.3s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .profile-list-item:hover,
