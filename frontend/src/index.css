@@ -51,16 +51,24 @@ main {
 /* Glassmorphism utility card */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-glow);
+  box-shadow: var(--glass-glow), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   border-radius: 24px;
-  transition: var(--transition-smooth);
+  transition: border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel:hover {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(167, 139, 250, 0.24);
+  background: rgba(18, 14, 36, 0.52);
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.65), 
+              0 0 24px rgba(167, 139, 250, 0.06),
+              inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
+  transform: translateY(-4px);
 }
 
 /* Custom Scrollbar */
@@ -84,10 +92,10 @@ main {
 .glow-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(120px);
+  filter: blur(130px);
   z-index: 0;
   pointer-events: none;
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 .glow-purple {
@@ -106,6 +114,16 @@ main {
   bottom: 10%;
   right: 15%;
   animation: floatOrb 20s infinite alternate-reverse ease-in-out;
+}
+
+.glow-coral {
+  width: 450px;
+  height: 450px;
+  background: var(--color-accent);
+  top: 35%;
+  left: -5%;
+  opacity: 0.22;
+  animation: floatOrb 22s infinite alternate ease-in-out;
 }
 
 @keyframes floatOrb {
@@ -209,18 +227,40 @@ main {
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
   border-radius: 14px;
-  transition: var(--transition-smooth);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .btn-primary {
   background: linear-gradient(135deg, var(--color-primary), #8b5cf6);
   color: white;
-  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
+  box-shadow: 0 4px 18px rgba(139, 92, 246, 0.22);
+}
+
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.18),
+    transparent
+  );
+  transition: all 0.55s ease;
+}
+
+.btn-primary:hover::after {
+  left: 100%;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.45);
 }
 
 .btn-primary:active {
@@ -228,14 +268,16 @@ main {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-primary);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(167, 139, 250, 0.2);
+  color: white;
+  transform: translateY(-1px);
 }
 
 .btn:disabled {
@@ -3869,4 +3911,21 @@ label {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Interactive hover list animations */
+.profile-list-item,
+.track-option,
+.member-item,
+.background-option,
+.room-card {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.profile-list-item:hover,
+.track-option:hover {
+  transform: translateX(6px);
 }

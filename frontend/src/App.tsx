@@ -1049,6 +1049,7 @@ function App() {
       {/* Decorative Glow Orbs */}
       <div className="glow-orb glow-purple" />
       <div className="glow-orb glow-teal" />
+      <div className="glow-orb glow-coral" />
 
       {/* Main Header */}
       <header className="app-header main-header">
