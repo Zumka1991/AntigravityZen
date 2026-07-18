@@ -98,7 +98,13 @@ export const RoomList: React.FC<RoomListProps> = ({
   // doing it client-side too keeps the order stable if the API ever
   // changes shape (and protects against stale prop arrays).
   const sortedRooms = useMemo(() => {
-    return [...rooms].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    return [...rooms].sort((a, b) => {
+      const aIsLobby = a.status === 'lobby';
+      const bIsLobby = b.status === 'lobby';
+      if (aIsLobby && !bIsLobby) return -1;
+      if (!aIsLobby && bIsLobby) return 1;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
   }, [rooms]);
 
   const formatCreatedAgo = (createdAt: number | undefined): string => {
@@ -271,7 +277,7 @@ export const RoomList: React.FC<RoomListProps> = ({
       ) : (
         <div className="rooms-grid">
           {sortedRooms.map((room) => (
-            <div key={room.id} className="room-card glass-panel">
+            <div key={room.id} className={`room-card glass-panel ${room.status === 'lobby' ? 'status-lobby' : ''}`}>
               <div className="room-card-header">
                 <h3>{room.name}</h3>
                 <div className="room-card-badges">
