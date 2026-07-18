@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -151,9 +152,23 @@ func main() {
 }
 
 func corsMiddleware() gin.HandlerFunc {
+	domain := os.Getenv("DOMAIN")
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+		origin := c.Request.Header.Get("Origin")
+		allowOrigin := "*"
+
+		if domain != "" && origin != "" {
+			if strings.HasSuffix(origin, "://"+domain) || strings.HasSuffix(origin, "."+domain) {
+				allowOrigin = origin
+			} else {
+				allowOrigin = "https://" + domain
+			}
+		} else if origin != "" {
+			allowOrigin = origin
+		}
+
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE, PUT")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if c.Request.Method == "OPTIONS" {

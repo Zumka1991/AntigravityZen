@@ -122,9 +122,48 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [unreadMessages, setUnreadMessages] = useState(0);
   const previousMessageCountRef = useRef(messages.length);
 
+  const [hasJoinedPractice, setHasJoinedPractice] = useState(false);
+
+  const unlockAudio = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const dummyCtx = new AudioCtx();
+        if (dummyCtx.state === 'suspended') {
+          dummyCtx.resume();
+        }
+      }
+    } catch (e) {
+      console.warn("Could not unlock Web Audio API:", e);
+    }
+    
+    if (roomState.status === 'playing') {
+      forcePlayAudio();
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.play().catch(e => console.warn("[Voice] unlock play failed:", e));
+      }
+    }
+    
+    setHasJoinedPractice(true);
+  };
+
   // Audio Volume States
-  const [musicVolume, setMusicVolume] = useState(0.55);
-  const [voiceVolume, setVoiceVolume] = useState(1.0);
+  const [musicVolume, setMusicVolume] = useState<number>(() => {
+    try {
+      const stored = window.localStorage.getItem('zenworld.musicVolume');
+      return stored ? Number(stored) : 0.55;
+    } catch {
+      return 0.55;
+    }
+  });
+  const [voiceVolume, setVoiceVolume] = useState<number>(() => {
+    try {
+      const stored = window.localStorage.getItem('zenworld.voiceVolume');
+      return stored ? Number(stored) : 1.0;
+    } catch {
+      return 1.0;
+    }
+  });
   const [showVolumeControls, setShowVolumeControls] = useState(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const serverOffsetRef = useRef(0);
@@ -134,6 +173,9 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     if (audioRef.current) {
       audioRef.current.volume = newVal;
     }
+    try {
+      window.localStorage.setItem('zenworld.musicVolume', String(newVal));
+    } catch (e) {}
   };
 
   const handleVoiceVolumeChange = (newVal: number) => {
@@ -141,6 +183,9 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     if (voiceAudioRef.current) {
       voiceAudioRef.current.volume = newVal;
     }
+    try {
+      window.localStorage.setItem('zenworld.voiceVolume', String(newVal));
+    } catch (e) {}
   };
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -931,6 +976,26 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
 
   return (
     <div className="room-grid">
+      {!hasJoinedPractice && (
+        <div className="modal-overlay" style={{ zIndex: 110, background: 'rgba(5, 4, 15, 0.85)', backdropFilter: 'blur(25px)' }}>
+          <div className="glass-panel" style={{ padding: '2.5rem', maxWidth: '420px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
+            <div className="brand-icon" style={{ width: '56px', height: '56px', animation: 'pulseLight 1.5s infinite alternate' }} />
+            <div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem', fontFamily: 'var(--font-heading)' }}>
+                {language === 'ru' ? 'Войти в пространство' : 'Enter the Space'}
+              </h2>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                {language === 'ru' 
+                  ? 'Вы подключаетесь к комнате медитации. Нажмите кнопку, чтобы активировать звук и присоединиться к практике.' 
+                  : 'You are joining the meditation room. Click below to enable audio and join the practice.'}
+              </p>
+            </div>
+            <button className="btn btn-primary" onClick={unlockAudio} style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', fontWeight: 700 }}>
+              {language === 'ru' ? 'Войти в практику →' : 'Enter Practice →'}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Meditation Center Area */}
       <div className="glass-panel meditation-center">
         {isPlaying && roomState.background && (

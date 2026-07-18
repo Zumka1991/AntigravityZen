@@ -9,6 +9,8 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // StoredUser представляет данные пользователя для сохранения в БД
@@ -74,7 +76,11 @@ func (am *AuthManager) Register(username, password string) (string, error) {
 	}
 
 	salt := generateSalt()
-	hash := hashPassword(password, salt)
+	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	hash := string(bcryptHash)
 
 	// Записываем в БД
 	_, err = am.db.Exec("INSERT INTO users (username, password_hash, salt, is_bot) VALUES (?, ?, ?, FALSE)", username, hash, salt)
@@ -210,9 +216,33 @@ func (am *AuthManager) Login(username, password string) (string, error) {
 		return "", err
 	}
 
-	hash := hashPassword(password, salt)
-	if hash != passwordHash {
-		return "", errors.New("invalid username or password")
+	// A Bcrypt hash starts with a standard prefix, e.g. "$2a$", "$2b$", "$2y$"
+	isBcrypt := strings.HasPrefix(passwordHash, "$2a$") ||
+		strings.HasPrefix(passwordHash, "$2b$") ||
+		strings.HasPrefix(passwordHash, "$2y$")
+
+	if isBcrypt {
+		err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
+		if err != nil {
+			return "", errors.New("invalid username or password")
+		}
+	} else {
+		// Legacy SHA-256 validation
+		legacyHash := hashPassword(password, salt)
+		if legacyHash != passwordHash {
+			return "", errors.New("invalid username or password")
+		}
+
+		// Upgrade legacy SHA-256 hash to Bcrypt!
+		newBcryptHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err == nil {
+			_, updateErr := am.db.Exec("UPDATE users SET password_hash = ? WHERE LOWER(username) = ?", string(newBcryptHash), key)
+			if updateErr != nil {
+				log.Printf("Failed to upgrade legacy password hash for user %s: %v", dbUsername, updateErr)
+			} else {
+				log.Printf("Successfully upgraded legacy password hash for user %s to Bcrypt", dbUsername)
+			}
+		}
 	}
 
 	return am.createSession(dbUsername, false)
@@ -309,7 +339,12 @@ func (am *AuthManager) EnsureAdminCreated(adminUsername, defaultPassword string)
 	}
 
 	salt := generateSalt()
-	hash := hashPassword(defaultPassword, salt)
+	bcryptHash, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Error generating admin bcrypt hash: %v", err)
+		return
+	}
+	hash := string(bcryptHash)
 
 	_, err = am.db.Exec(
 		"INSERT INTO users (username, password_hash, salt, is_bot) VALUES (?, ?, ?, FALSE)",

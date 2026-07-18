@@ -113,6 +113,12 @@ func AddTrackHandler(authManager *room.AuthManager) gin.HandlerFunc {
 			return
 		}
 
+		contentType := strings.ToLower(file.Header.Get("Content-Type"))
+		if !strings.HasPrefix(contentType, "audio/") && contentType != "application/octet-stream" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded file must be a valid audio format"})
+			return
+		}
+
 		allowedExtensions := map[string]bool{
 			".mp3":  true,
 			".wav":  true,
