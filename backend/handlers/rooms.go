@@ -16,30 +16,36 @@ func GetRoomsHandler(hub *room.Hub) gin.HandlerFunc {
 		defer hub.Mutex.RUnlock()
 
 		type RoomInfo struct {
-			ID          string                     `json:"id"`
-			Name        string                     `json:"name"`
-			HostID      string                     `json:"hostId"`
-			MemberCount int                        `json:"memberCount"`
-			Status      string                     `json:"status"`
-			ActiveTrack *room.Track                `json:"activeTrack,omitempty"`
-			Background  *room.MeditationBackground `json:"background,omitempty"`
-			IsProtected bool                       `json:"isProtected"`
-			CreatedAt   int64                      `json:"createdAt"`
+			ID           string                     `json:"id"`
+			Name         string                     `json:"name"`
+			HostID       string                     `json:"hostId"`
+			HostUsername string                     `json:"hostUsername,omitempty"`
+			MemberCount  int                        `json:"memberCount"`
+			Status       string                     `json:"status"`
+			ActiveTrack  *room.Track                `json:"activeTrack,omitempty"`
+			Background   *room.MeditationBackground `json:"background,omitempty"`
+			Duration     int                        `json:"duration,omitempty"`
+			StartedAt    int64                      `json:"startedAt,omitempty"`
+			IsProtected  bool                       `json:"isProtected"`
+			CreatedAt    int64                      `json:"createdAt"`
 		}
 
 		rooms := make([]RoomInfo, 0, len(hub.Rooms))
 		for _, rm := range hub.Rooms {
 			rm.Mutex.RLock()
 			rooms = append(rooms, RoomInfo{
-				ID:          rm.ID,
-				Name:        rm.Name,
-				HostID:      rm.HostID,
-				MemberCount: len(rm.Clients),
-				Status:      rm.Status,
-				ActiveTrack: rm.ActiveTrack,
-				Background:  rm.Background,
-				IsProtected: len(rm.PasswordHash) > 0,
-				CreatedAt:   rm.CreatedAt,
+				ID:           rm.ID,
+				Name:         rm.Name,
+				HostID:       rm.HostID,
+				HostUsername: rm.HostUsername,
+				MemberCount:  len(rm.Clients),
+				Status:       rm.Status,
+				ActiveTrack:  rm.ActiveTrack,
+				Background:   rm.Background,
+				Duration:     rm.Duration,
+				StartedAt:    rm.StartedAt,
+				IsProtected:  len(rm.PasswordHash) > 0,
+				CreatedAt:    rm.CreatedAt,
 			})
 			rm.Mutex.RUnlock()
 		}

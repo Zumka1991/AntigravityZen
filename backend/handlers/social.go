@@ -43,11 +43,17 @@ func ListProfilesHandler(authManager *room.AuthManager) gin.HandlerFunc {
 
 func GetProfileHandler(authManager *room.AuthManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, ok := registeredUsername(c, authManager)
-		if !ok {
+		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		username, isGuest, valid := authManager.ValidateSession(token)
+		if !valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		profile, err := room.GetUserProfile(username, c.Param("username"))
+		viewer := username
+		if isGuest {
+			viewer = ""
+		}
+		profile, err := room.GetUserProfile(viewer, c.Param("username"))
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 			return

@@ -27,6 +27,8 @@ type Props = {
   onWrite?: (username: string) => void;
   /** Required when variant === 'modal' — closes the overlay. */
   onClose?: () => void;
+  isGuest?: boolean;
+  onRequireAuth?: () => void;
 };
 
 const authHeaders = (token: string) => ({
@@ -81,6 +83,8 @@ export function ProfileCard({
   variant = 'panel',
   onWrite,
   onClose,
+  isGuest = false,
+  onRequireAuth,
 }: Props) {
   const ru = language === 'ru';
   const [profile, setProfile] = useState<ProfileCardData | null>(null);
@@ -89,9 +93,9 @@ export function ProfileCard({
   const [notice, setNotice] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
 
-  const isSelf = profile
+  const isSelf = !isGuest && (profile
     ? profile.username.toLowerCase() === viewerUsername.toLowerCase()
-    : username.toLowerCase() === viewerUsername.toLowerCase();
+    : username.toLowerCase() === viewerUsername.toLowerCase());
 
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -128,6 +132,10 @@ export function ProfileCard({
 
   const toggleLike = async () => {
     if (!profile) return;
+    if (isGuest) {
+      onRequireAuth?.();
+      return;
+    }
     setNotice(null);
     const response = await fetch(
       `${apiBase}/profiles/${encodeURIComponent(profile.username)}/like`,
@@ -147,6 +155,10 @@ export function ProfileCard({
 
   const toggleIgnore = async () => {
     if (!profile) return;
+    if (isGuest) {
+      onRequireAuth?.();
+      return;
+    }
     if (!profile.ignoredByMe && !window.confirm(
       ru
         ? `Игнорировать пользователя ${profile.username}? Вы не сможете писать друг другу.`
@@ -177,6 +189,10 @@ export function ProfileCard({
 
   const handleWrite = () => {
     if (!profile) return;
+    if (isGuest) {
+      onRequireAuth?.();
+      return;
+    }
     if (onWrite) {
       onWrite(profile.username);
       return;
@@ -248,8 +264,8 @@ export function ProfileCard({
           className="btn btn-primary"
           type="button"
           onClick={handleWrite}
-          disabled={data.ignoredByMe}
-          title={data.ignoredByMe
+          disabled={!isGuest && data.ignoredByMe}
+          title={!isGuest && data.ignoredByMe
             ? (ru ? 'Снимите игнор, чтобы написать' : 'Unignore to send a message')
             : undefined}
         >
@@ -264,15 +280,17 @@ export function ProfileCard({
             ? (ru ? 'Нравится' : 'Liked')
             : (ru ? 'Поставить лайк' : 'Like profile')}
         </button>
-        <button
-          className={`btn btn-secondary ignore-button ${data.ignoredByMe ? 'active' : ''}`}
-          type="button"
-          onClick={() => void toggleIgnore()}
-        >
-          {data.ignoredByMe
-            ? (ru ? 'Перестать игнорировать' : 'Stop ignoring')
-            : (ru ? 'Игнорировать' : 'Ignore')}
-        </button>
+        {!isGuest && (
+          <button
+            className={`btn btn-secondary ignore-button ${data.ignoredByMe ? 'active' : ''}`}
+            type="button"
+            onClick={() => void toggleIgnore()}
+          >
+            {data.ignoredByMe
+              ? (ru ? 'Перестать игнорировать' : 'Stop ignoring')
+              : (ru ? 'Игнорировать' : 'Ignore')}
+          </button>
+        )}
       </>
     );
   };

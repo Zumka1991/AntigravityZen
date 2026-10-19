@@ -63,13 +63,15 @@ function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [openCreateRoomTrigger, setOpenCreateRoomTrigger] = useState(0);
 
   useEffect(() => {
     setCaptchaToken(null);
-  }, [showAuthModal, showLogin]);
+  }, [showAuthModal, showLogin, token]);
 
   useEffect(() => {
-    if (!showAuthModal || showLogin) return;
+    const needsCaptcha = !showLogin && (showAuthModal || !token);
+    if (!needsCaptcha) return;
 
     let checkInterval: number;
 
@@ -82,8 +84,8 @@ function App() {
           container.innerHTML = '';
           grecaptcha.render(container, {
             sitekey: '6Lcgaz8tAAAAAJSyVEpG9b1qEGNcAkRoBQH1QJVE',
-            callback: (token: string) => {
-              setCaptchaToken(token);
+            callback: (tok: string) => {
+              setCaptchaToken(tok);
             },
             'expired-callback': () => {
               setCaptchaToken(null);
@@ -107,7 +109,7 @@ function App() {
         container.innerHTML = '';
       }
     };
-  }, [showAuthModal, showLogin]);
+  }, [showAuthModal, showLogin, token]);
 
   // Sound library / admin dashboard states
   const [showSoundLibrary, setShowSoundLibrary] = useState(false);
@@ -138,13 +140,23 @@ function App() {
 
   const t = translations[lang];
 
+  const pushViewHistory = (view: string) => {
+    try {
+      window.history.pushState({ zenView: view }, document.title);
+    } catch {
+      // ignore history errors
+    }
+  };
+
   const openAboutPage = () => {
+    pushViewHistory('about');
     setShowSocial(false);
     setShowAbout(true);
     setMobileMenuOpen(false);
   };
 
   const openSocialPage = (tab: 'profiles' | 'messages') => {
+    pushViewHistory(`social-${tab}`);
     setShowAbout(false);
     setSocialTab(tab);
     setShowSocial(true);
@@ -288,7 +300,7 @@ function App() {
     const isRu = lang === 'ru';
 
     if (activeRoom) {
-      pageTitle = `${activeRoom.name} | ZenWorld`;
+      pageTitle = `${activeRoom.name || (roomState?.name ?? 'Room')} | ZenWorld`;
     } else if (showAbout) {
       pageTitle = `${isRu ? 'О проекте' : 'About'} | ZenWorld`;
     } else if (showSocial && socialTab === 'profiles') {
@@ -306,7 +318,7 @@ function App() {
     }
 
     document.title = pageTitle;
-  }, [activeRoom, showAbout, showSocial, socialTab, showSoundLibrary, showAdminDashboard, lang, t]);
+  }, [activeRoom, roomState?.name, showAbout, showSocial, socialTab, showSoundLibrary, showAdminDashboard, lang, t]);
 
   // Fetch initial tracks and rooms when logged in
   const fetchRooms = async () => {
@@ -394,6 +406,7 @@ function App() {
 
   const openDirectMessage = (target: string) => {
     if (!target) return;
+    pushViewHistory('social-messages');
     setShowAbout(false);
     setSocialTab('messages');
     setShowSocial(true);
@@ -430,15 +443,26 @@ function App() {
     fetchRooms();
     fetchEvents();
 
-    // Poll room list every 5 seconds when in lobby
+    // Poll room list every 5 seconds when in lobby and tab is visible
     const interval = setInterval(() => {
-      if (!activeRoom) {
+      if (!activeRoom && !document.hidden) {
         fetchRooms();
         fetchEvents();
       }
     }, 5000);
 
-    return () => clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !activeRoom) {
+        fetchRooms();
+        fetchEvents();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [activeRoom, token]);
 
   useEffect(() => {
@@ -447,6 +471,7 @@ function App() {
       return;
     }
     const loadNotifications = async () => {
+      if (document.hidden) return;
       try {
         const response = await fetch(`${API_BASE}/notifications`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -461,7 +486,14 @@ function App() {
     };
     void loadNotifications();
     const interval = window.setInterval(loadNotifications, 10000);
-    return () => window.clearInterval(interval);
+    const handleVisibility = () => {
+      if (!document.hidden) void loadNotifications();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [token, isGuest]);
 
   // Connect to websocket when in room
@@ -643,12 +675,14 @@ function App() {
 
   const handleJoinRoom = async (roomId: string, password?: string) => {
     const accessTicket = password ? await requestRoomAccess(roomId, password, false) : undefined;
+    pushViewHistory('room');
     setActiveRoom({ id: roomId, name: null, accessTicket });
   };
 
   const handleCreateRoom = async (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string, password?: string) => {
     const roomId = generateId().slice(0, 8);
     const accessTicket = password ? await requestRoomAccess(roomId, password, true) : undefined;
+    pushViewHistory('room');
     setActiveRoom({ id: roomId, name: roomName, duration, trackId, voiceTrackId, backgroundId, accessTicket });
   };
 
@@ -715,6 +749,29 @@ function App() {
     setTimeout(() => fetchTracks(), 500);
     setTimeout(() => fetchTracks(), 2500);
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (profileUsername) {
+        setProfileUsername(null);
+        return;
+      }
+      if (activeRoom) {
+        handleLeaveRoom();
+        return;
+      }
+      if (showAbout) {
+        setShowAbout(false);
+        return;
+      }
+      if (showSocial) {
+        setShowSocial(false);
+        setPendingDialog(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeRoom, showAbout, showSocial, profileUsername]);
 
   // Auth operations
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -951,6 +1008,33 @@ function App() {
         </header>
 
         <div className="glass-panel auth-card">
+          <div className="auth-mode-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showLogin}
+              className={`auth-mode-tab ${showLogin ? 'active' : ''}`}
+              onClick={() => {
+                setShowLogin(true);
+                setAuthError(null);
+              }}
+            >
+              {t.signInBtn}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!showLogin}
+              className={`auth-mode-tab ${!showLogin ? 'active' : ''}`}
+              onClick={() => {
+                setShowLogin(false);
+                setAuthError(null);
+              }}
+            >
+              {t.signUpBtn}
+            </button>
+          </div>
+
           <div className="auth-intro">
           <h1>
             {showLogin ? t.loginTitle : t.registerTitle}
@@ -997,7 +1081,17 @@ function App() {
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary auth-submit">
+            {!showLogin && (
+              <div className="form-group" style={{ display: 'flex', justifyContent: 'center', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                <div id="recaptcha-register-container"></div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary auth-submit"
+              disabled={!showLogin && !captchaToken}
+            >
               {showLogin ? t.signInBtn : t.signUpBtn}
             </button>
           </form>
@@ -1043,6 +1137,8 @@ function App() {
       </div>
     );
   }
+
+  const totalPracticingNow = rooms.reduce((sum, r) => sum + (r.memberCount || 0), 0);
 
   return (
     <div className={`app-container ${activeRoom ? 'in-room' : ''}`}>
@@ -1137,16 +1233,23 @@ function App() {
             </button>
           )}
           {!activeRoom && token && (
-            <div className="user-badge" style={{ gap: '0.75rem' }}>
+            <div className="user-badge" style={{ gap: '0.6rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
                 <button
                   type="button"
                   className="user-badge-name"
-                  onClick={() => openProfileCard(username)}
-                  disabled={isGuest}
+                  onClick={() => {
+                    if (isGuest) {
+                      setShowLogin(false);
+                      setAuthError(null);
+                      setShowAuthModal(true);
+                    } else {
+                      openProfileCard(username);
+                    }
+                  }}
                   title={isGuest
-                    ? (lang === 'ru' ? 'Зарегистрируйтесь, чтобы открыть профиль' : 'Register to view your profile')
+                    ? (lang === 'ru' ? 'Зарегистрируйтесь, чтобы создать постоянный профиль' : 'Register to create a permanent profile')
                     : (lang === 'ru' ? 'Открыть профиль' : 'Open profile')}
                   aria-label={lang === 'ru' ? `Открыть профиль ${username}` : `Open ${username}'s profile`}
                 >
@@ -1155,17 +1258,31 @@ function App() {
                 </button>
               </div>
               {isGuest ? (
-                <button
-                  className="btn btn-primary guest-register-button"
-                  onClick={() => {
-                    setShowLogin(false);
-                    setAuthError(null);
-                    setShowAuthModal(true);
-                  }}
-                >
-                  <span className="desktop-menu-icon" aria-hidden="true">＋</span>
-                  {t.createAccountBtn}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-quiet guest-login-button"
+                    onClick={() => {
+                      setShowLogin(true);
+                      setAuthError(null);
+                      setShowAuthModal(true);
+                    }}
+                    style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                  >
+                    {t.signInBtn}
+                  </button>
+                  <button
+                    className="btn btn-primary guest-register-button"
+                    onClick={() => {
+                      setShowLogin(false);
+                      setAuthError(null);
+                      setShowAuthModal(true);
+                    }}
+                  >
+                    <span className="desktop-menu-icon" aria-hidden="true">＋</span>
+                    {t.createAccountBtn}
+                  </button>
+                </div>
               ) : (
                 <button
                   className="btn logout-button"
@@ -1208,8 +1325,12 @@ function App() {
                     onClick={() => {
                       setMobileMenuOpen(false);
                       if (!isGuest) openProfileCard(username);
+                      else {
+                        setShowLogin(false);
+                        setAuthError(null);
+                        setShowAuthModal(true);
+                      }
                     }}
-                    disabled={isGuest}
                   >
                     <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
                     <div>
@@ -1267,14 +1388,24 @@ function App() {
                   <div className="mobile-menu-group">
                     <span>{lang === 'ru' ? 'Аккаунт' : 'Account'}</span>
                     {isGuest ? (
-                      <button type="button" className="mobile-account-primary" onClick={() => {
-                        setShowLogin(false);
-                        setAuthError(null);
-                        setShowAuthModal(true);
-                        setMobileMenuOpen(false);
-                      }}>
-                        <b>＋</b><span>{t.createAccountBtn}</span>
-                      </button>
+                      <>
+                        <button type="button" onClick={() => {
+                          setShowLogin(true);
+                          setAuthError(null);
+                          setShowAuthModal(true);
+                          setMobileMenuOpen(false);
+                        }}>
+                          <b>→</b><span>{t.signInBtn}</span>
+                        </button>
+                        <button type="button" className="mobile-account-primary" onClick={() => {
+                          setShowLogin(false);
+                          setAuthError(null);
+                          setShowAuthModal(true);
+                          setMobileMenuOpen(false);
+                        }}>
+                          <b>＋</b><span>{t.createAccountBtn}</span>
+                        </button>
+                      </>
                     ) : (
                       <button type="button" className="mobile-logout" onClick={() => {
                         setMobileMenuOpen(false);
@@ -1359,67 +1490,96 @@ function App() {
         ) : (
           <>
             <section className="glass-panel welcome-panel">
-              <div>
+              <div className="welcome-hero-copy">
                 <h1>{t.welcomeTitle}</h1>
                 <p>{t.welcomeDesc}</p>
+                <div className="welcome-live-pills">
+                  <span className="welcome-pill">
+                    <i className="welcome-dot live" />
+                    {lang === 'ru' ? `Комнат: ${rooms.length}` : `Rooms: ${rooms.length}`}
+                  </span>
+                  <span className="welcome-pill">
+                    <i className="welcome-dot teal" />
+                    {lang === 'ru' ? `В практике: ${totalPracticingNow}` : `Practicing: ${totalPracticingNow}`}
+                  </span>
+                  <span className="welcome-pill">
+                    <i className="welcome-dot purple" />
+                    {lang === 'ru' ? `В расписании: ${events.length}` : `Scheduled: ${events.length}`}
+                  </span>
+                </div>
               </div>
-              <div className="user-badge">
-                <div className="user-avatar">{username.charAt(0).toUpperCase()}</div>
+              <div className="welcome-hero-actions">
                 <button
                   type="button"
-                  className="user-badge-name"
-                  onClick={() => openProfileCard(username)}
-                  disabled={isGuest}
-                  title={isGuest
-                    ? (lang === 'ru' ? 'Зарегистрируйтесь, чтобы открыть профиль' : 'Register to view your profile')
-                    : (lang === 'ru' ? 'Открыть профиль' : 'Open profile')}
+                  className="btn btn-primary"
+                  onClick={() => setOpenCreateRoomTrigger((c) => c + 1)}
                 >
-                  {username}
+                  ＋ {t.createRoomBtn}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    document.getElementById('lobby-schedule-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  📅 {t.eventPlannerTitle}
                 </button>
               </div>
             </section>
-            <EventPlanner
-              events={events}
-              tracks={tracks}
-              backgrounds={backgrounds}
-              username={username}
-              onCreate={handleCreateEvent}
-              onAttendance={handleEventAttendance}
-              onDelete={handleDeleteEvent}
-              onEnter={handleJoinRoom}
-              requestedEventId={requestedEventId}
-              onRequestedEventHandled={() => {
-                setRequestedEventId(null);
-                clearInvitationTarget('eventId');
-              }}
-              t={t}
-            />
-            <RoomList
-              rooms={rooms}
-              tracks={tracks}
-              backgrounds={backgrounds}
-              onJoinRoom={handleJoinRoom}
-              onCreateRoom={handleCreateRoom}
-              requestedRoomId={requestedRoomId}
-              onRequestedRoomHandled={() => {
-                setRequestedRoomId(null);
-                clearInvitationTarget('roomId');
-              }}
-              t={t}
-            />
-            <GlobalChat
-              apiBase={API_BASE}
-              token={token}
-              username={username}
-              t={t}
-              onOpenProfile={openProfileCard}
-            />
+
+            <div className="lobby-main-grid">
+              <div className="lobby-primary-column">
+                <RoomList
+                  rooms={rooms}
+                  tracks={tracks}
+                  backgrounds={backgrounds}
+                  onJoinRoom={handleJoinRoom}
+                  onCreateRoom={handleCreateRoom}
+                  requestedRoomId={requestedRoomId}
+                  onRequestedRoomHandled={() => {
+                    setRequestedRoomId(null);
+                    clearInvitationTarget('roomId');
+                  }}
+                  openCreateTrigger={openCreateRoomTrigger}
+                  t={t}
+                />
+                <div id="lobby-schedule-section">
+                  <EventPlanner
+                    events={events}
+                    tracks={tracks}
+                    backgrounds={backgrounds}
+                    username={username}
+                    onCreate={handleCreateEvent}
+                    onAttendance={handleEventAttendance}
+                    onDelete={handleDeleteEvent}
+                    onEnter={handleJoinRoom}
+                    requestedEventId={requestedEventId}
+                    onRequestedEventHandled={() => {
+                      setRequestedEventId(null);
+                      clearInvitationTarget('eventId');
+                    }}
+                    t={t}
+                  />
+                </div>
+              </div>
+
+              <aside className="lobby-chat-column">
+                <GlobalChat
+                  apiBase={API_BASE}
+                  token={token}
+                  username={username}
+                  t={t}
+                  onOpenProfile={openProfileCard}
+                />
+              </aside>
+            </div>
           </>
         )}
       </main>
 
       {/* Profile card overlay — opened from any username click in the app. */}
-      {profileUsername && !isGuest && (
+      {profileUsername && (
         <ProfileCard
           apiBase={API_BASE}
           token={token}
@@ -1427,6 +1587,13 @@ function App() {
           language={lang}
           username={profileUsername}
           variant="modal"
+          isGuest={isGuest}
+          onRequireAuth={() => {
+            closeProfileCard();
+            setShowLogin(false);
+            setAuthError(null);
+            setShowAuthModal(true);
+          }}
           onClose={closeProfileCard}
           onWrite={(target) => {
             closeProfileCard();
@@ -1441,6 +1608,32 @@ function App() {
             <button className="modal-close" onClick={() => setShowAuthModal(false)} aria-label={t.closeAuth}>
               &times;
             </button>
+            <div className="auth-mode-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={showLogin}
+                className={`auth-mode-tab ${showLogin ? 'active' : ''}`}
+                onClick={() => {
+                  setShowLogin(true);
+                  setAuthError(null);
+                }}
+              >
+                {t.signInBtn}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!showLogin}
+                className={`auth-mode-tab ${!showLogin ? 'active' : ''}`}
+                onClick={() => {
+                  setShowLogin(false);
+                  setAuthError(null);
+                }}
+              >
+                {t.signUpBtn}
+              </button>
+            </div>
             <div className="auth-intro">
               <span className="eyebrow">{t.guestAccountEyebrow}</span>
               <h2>{showLogin ? t.loginTitle : t.registerTitle}</h2>

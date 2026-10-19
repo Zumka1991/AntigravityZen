@@ -12,3 +12,4 @@ services:
     build:
       context: ./frontend
     pull_policy: build
+

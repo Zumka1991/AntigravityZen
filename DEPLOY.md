@@ -1,8 +1,11 @@
 # Deploying Zenworld
 
-The production stack runs the Go API, static frontend, PostgreSQL 17, and Caddy
-with automatic HTTPS. Only ports 80 and 443 are public. Application images are
-built by GitHub Actions and published to GHCR for `linux/amd64`.
+The production stack runs the Go API, static frontend, and PostgreSQL 17 behind
+the shared VPS Caddy entrance (`/opt/edge`) with automatic HTTPS. Only ports 80
+and 443 on the shared `edge` proxy are public; the backend (`zenworld-backend`)
+and frontend (`zenworld-frontend`) join the `edge` Docker network while
+PostgreSQL stays on the private `app` network. Application images are built by
+GitHub Actions and published to GHCR for `linux/amd64`.
 
 ## Local development
 
@@ -69,17 +72,17 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ## Production deploy
 
 1. Push `main` to publish the backend and frontend images to GHCR.
-2. Point the domain's `A` record at the VPS.
-3. Prepare an Ubuntu/Debian VPS:
+2. Point the domain's `A` records (`@` and `www`) at the VPS (`191.215.45.93`).
+3. If preparing a fresh Ubuntu/Debian VPS without Docker:
 
 ```bash
-ssh root@SERVER_IP 'bash -s' < scripts/bootstrap-server.sh
+ssh root@191.215.45.93 'bash -s' < scripts/bootstrap-server.sh
 ```
 
-4. Deploy:
+4. Deploy (installs `/opt/zenworld`, starts containers, writes `/opt/edge/sites/zenworld.ru.caddy`, and reloads the shared `edge` Caddy):
 
 ```bash
-DEPLOY_HOST=root@SERVER_IP ./scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
 The first deploy generates independent admin and PostgreSQL passwords in the

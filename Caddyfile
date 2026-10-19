@@ -1,13 +1,14 @@
-{$DOMAIN:zenworld.ru} {
+# Zenworld (/opt/zenworld): Go API + static frontend.
+zenworld.ru {
 	encode zstd gzip
 
 	@backend path /api/* /ws /uploads/* /healthz
 	handle @backend {
-		reverse_proxy backend:8080
+		reverse_proxy zenworld-backend:8080
 	}
 
 	handle {
-		reverse_proxy frontend:80
+		reverse_proxy zenworld-frontend:80
 	}
 
 	header {
@@ -17,4 +18,8 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		-Server
 	}
+}
+
+www.zenworld.ru {
+	redir https://zenworld.ru{uri} permanent
 }

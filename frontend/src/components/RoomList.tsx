@@ -29,8 +29,11 @@ export interface RoomInfo {
   id: string;
   name: string;
   hostId: string;
+  hostUsername?: string;
   memberCount: number;
   status: string;
+  duration?: number;
+  startedAt?: number;
   activeTrack?: Track;
   background?: MeditationBackground;
   isProtected: boolean;
@@ -45,6 +48,7 @@ interface RoomListProps {
   onCreateRoom: (roomName: string, duration: number, trackId: string, backgroundId: string, voiceTrackId?: string, password?: string) => Promise<void>;
   requestedRoomId?: string | null;
   onRequestedRoomHandled?: () => void;
+  openCreateTrigger?: number;
   t: typeof translations.en;
 }
 
@@ -56,6 +60,7 @@ export const RoomList: React.FC<RoomListProps> = ({
   onCreateRoom,
   requestedRoomId,
   onRequestedRoomHandled,
+  openCreateTrigger,
   t,
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -66,13 +71,29 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [joinPassword, setJoinPassword] = useState('');
   const [accessError, setAccessError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [duration, setDuration] = useState(60);
+  const [duration, setDuration] = useState(600);
   const ambientTracks = tracks.filter(t => !t.ownerUsername || t.isPublic);
   const recordedTracks = tracks.filter(t => !!t.ownerUsername && !t.isPublic);
   const [selectedTrackId, setSelectedTrackId] = useState(ambientTracks[0]?.id || '');
   const [selectedVoiceTrackId, setSelectedVoiceTrackId] = useState<string>('none');
   const [selectedBackgroundId, setSelectedBackgroundId] = useState(backgrounds[0]?.id || '');
   const [useTrackDuration, setUseTrackDuration] = useState(false);
+
+  const openCreateRoomModal = () => {
+    if (ambientTracks.length > 0 && !selectedTrackId) {
+      setSelectedTrackId(ambientTracks[0].id);
+    }
+    if (backgrounds.length > 0 && !selectedBackgroundId) {
+      setSelectedBackgroundId(backgrounds[0].id);
+    }
+    setShowCreateModal(true);
+  };
+
+  useEffect(() => {
+    if (openCreateTrigger && openCreateTrigger > 0) {
+      openCreateRoomModal();
+    }
+  }, [openCreateTrigger]);
 
   React.useEffect(() => {
     if (useTrackDuration) {
@@ -86,13 +107,13 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
-  // Tick once a minute so the "X min ago" labels stay fresh without
-  // re-rendering the whole lobby every second.
+  const hasPlayingRooms = useMemo(() => rooms.some((r) => r.status === 'playing'), [rooms]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 60_000);
+    const intervalMs = hasPlayingRooms ? 5_000 : 30_000;
+    const interval = window.setInterval(() => setNow(Date.now()), intervalMs);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [hasPlayingRooms]);
 
   // Newest rooms first. The backend already sorts by createdAt desc, but
   // doing it client-side too keeps the order stable if the API ever
@@ -242,6 +263,19 @@ export const RoomList: React.FC<RoomListProps> = ({
     }
   };
 
+  const getPlayingProgress = (room: RoomInfo) => {
+    if (room.status !== 'playing' || !room.startedAt || !room.duration || room.duration <= 0) {
+      return null;
+    }
+    const elapsedSec = Math.max(0, (now - room.startedAt) / 1000);
+    const remainingSec = Math.max(0, Math.ceil(room.duration - elapsedSec));
+    const progressPct = Math.min(100, Math.max(0, (elapsedSec / room.duration) * 100));
+    const mins = Math.floor(remainingSec / 60);
+    const secs = remainingSec % 60;
+    const timeText = `${mins}:${secs.toString().padStart(2, '0')}`;
+    return { remainingSec, progressPct, timeText };
+  };
+
   return (
     <div className="lobby-page">
       {/* Title & Actions */}
@@ -250,15 +284,7 @@ export const RoomList: React.FC<RoomListProps> = ({
           <span className="eyebrow">{rooms.length} · {t.globalChatLive}</span>
           <h2>{t.activeRooms}</h2>
         </div>
-        <button className="btn btn-primary" onClick={() => {
-          if (ambientTracks.length > 0 && !selectedTrackId) {
-            setSelectedTrackId(ambientTracks[0].id);
-          }
-          if (backgrounds.length > 0 && !selectedBackgroundId) {
-            setSelectedBackgroundId(backgrounds[0].id);
-          }
-          setShowCreateModal(true);
-        }}>
+        <button className="btn btn-primary" onClick={openCreateRoomModal}>
           {t.createRoomBtn}
         </button>
       </div>
@@ -276,51 +302,82 @@ export const RoomList: React.FC<RoomListProps> = ({
         </div>
       ) : (
         <div className="rooms-grid">
-          {sortedRooms.map((room) => (
-            <div key={room.id} className={`room-card glass-panel ${room.status === 'lobby' ? 'status-lobby' : ''}`}>
-              <div className="room-card-header">
-                <h3>{room.name}</h3>
-                <div className="room-card-badges">
-                  {room.isProtected && <span className="protected-badge" title={t.protectedRoom}>⌁ {t.privateRoom}</span>}
-                  <span className={`status-badge ${room.status}`}>{getStatusText(room.status)}</span>
+          {sortedRooms.map((room) => {
+            const playingInfo = getPlayingProgress(room);
+            return (
+              <div key={room.id} className={`room-card glass-panel ${room.status === 'lobby' ? 'status-lobby' : ''} ${room.status === 'playing' ? 'status-playing' : ''}`}>
+                {room.background?.imageUrl && (
+                  <div
+                    className="room-card-backdrop"
+                    style={{ backgroundImage: `url("${room.background.imageUrl}")` }}
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="room-card-header">
+                  <h3>{room.name}</h3>
+                  <div className="room-card-badges">
+                    {room.isProtected && <span className="protected-badge" title={t.protectedRoom}>⌁ {t.privateRoom}</span>}
+                    <span className={`status-badge ${room.status}`}>{getStatusText(room.status)}</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="room-card-meta">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                  <span>{room.memberCount} {t.membersActive}</span>
+                <div className="room-card-meta">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>{room.memberCount} {t.membersActive}</span>
+                  </div>
+                  {room.hostUsername && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--color-text-secondary)' }}>
+                      <span aria-hidden="true" style={{ fontSize: '0.8rem' }}>👑</span>
+                      <span>{room.hostUsername}</span>
+                    </div>
+                  )}
+                  {room.activeTrack && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                      <span>{getTrackTitle(room.activeTrack)}</span>
+                    </div>
+                  )}
                 </div>
-                {room.activeTrack && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--color-primary)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                    <span>{getTrackTitle(room.activeTrack)}</span>
+
+                {playingInfo && (
+                  <div className="room-card-progress">
+                    <div className="room-card-progress-bar">
+                      <div className="room-card-progress-fill" style={{ width: `${playingInfo.progressPct}%` }} />
+                    </div>
+                    <span className="room-card-progress-label">
+                      ⏱ {t.durationMinutes === 'мин' ? `Осталось ${playingInfo.timeText}` : `${playingInfo.timeText} left`}
+                    </span>
                   </div>
                 )}
-              </div>
 
-              <div className="room-card-footer">
-                <div className="room-card-footer-meta">
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                    {room.status === 'playing' ? t.meditationInProgress : t.waitingForHost}
-                  </span>
-                  {room.createdAt ? (
-                    <span className="room-created-ago" title={t.createdLabel} style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                      <span>{t.createdLabel}: {formatCreatedAgo(room.createdAt)}</span>
+                <div className="room-card-footer">
+                  <div className="room-card-footer-meta">
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                      {room.status === 'playing'
+                        ? t.meditationInProgress
+                        : room.duration
+                        ? `${t.waitingForHost} · ${formatDurationText(room.duration)}`
+                        : t.waitingForHost}
                     </span>
-                  ) : null}
+                    {room.createdAt ? (
+                      <span className="room-created-ago" title={t.createdLabel} style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span>{t.createdLabel}: {formatCreatedAgo(room.createdAt)}</span>
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleJoin(room)}
+                    style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem', borderRadius: '10px' }}
+                  >
+                    {t.joinRoom}
+                  </button>
                 </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handleJoin(room)}
-                  style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem', borderRadius: '10px' }}
-                >
-                  {t.joinRoom}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -48,18 +48,19 @@ type Message struct {
 
 // RoomState payload sent to clients
 type RoomState struct {
-	ID          string                `json:"id"`
-	Name        string                `json:"name"`
-	HostID      string                `json:"hostId"`
-	Clients     []User                `json:"clients"`
-	Status      string                `json:"status"` // "lobby", "playing", "finished"
-	ActiveTrack *Track                `json:"activeTrack,omitempty"`
-	VoiceTrack  *Track                `json:"voiceTrack,omitempty"`
-	Background  *MeditationBackground `json:"background,omitempty"`
-	Duration    int                   `json:"duration,omitempty"`  // selected duration in seconds
-	StartedAt   int64                 `json:"startedAt,omitempty"` // Unix timestamp in ms
-	ServerTime  int64                 `json:"serverTime"`          // current server Unix timestamp in ms
-	HostPresent bool                  `json:"hostPresent"`
+	ID           string                `json:"id"`
+	Name         string                `json:"name"`
+	HostID       string                `json:"hostId"`
+	HostUsername string                `json:"hostUsername,omitempty"`
+	Clients      []User                `json:"clients"`
+	Status       string                `json:"status"` // "lobby", "playing", "finished"
+	ActiveTrack  *Track                `json:"activeTrack,omitempty"`
+	VoiceTrack   *Track                `json:"voiceTrack,omitempty"`
+	Background   *MeditationBackground `json:"background,omitempty"`
+	Duration     int                   `json:"duration,omitempty"`  // selected duration in seconds
+	StartedAt    int64                 `json:"startedAt,omitempty"` // Unix timestamp in ms
+	ServerTime   int64                 `json:"serverTime"`          // current server Unix timestamp in ms
+	HostPresent  bool                  `json:"hostPresent"`
 }
 
 type User struct {
@@ -274,18 +275,19 @@ func (h *Hub) BroadcastRoomState(roomID string) {
 	}
 
 	state := RoomState{
-		ID:          room.ID,
-		Name:        room.Name,
-		HostID:      room.HostID,
-		Clients:     users,
-		Status:      room.Status,
-		ActiveTrack: room.ActiveTrack,
-		VoiceTrack:  room.VoiceTrack,
-		Background:  room.Background,
-		Duration:    room.Duration,
-		StartedAt:   room.StartedAt,
-		ServerTime:  time.Now().UnixNano() / int64(time.Millisecond),
-		HostPresent: false,
+		ID:           room.ID,
+		Name:         room.Name,
+		HostID:       room.HostID,
+		HostUsername: room.HostUsername,
+		Clients:      users,
+		Status:       room.Status,
+		ActiveTrack:  room.ActiveTrack,
+		VoiceTrack:   room.VoiceTrack,
+		Background:   room.Background,
+		Duration:     room.Duration,
+		StartedAt:    room.StartedAt,
+		ServerTime:   time.Now().UnixNano() / int64(time.Millisecond),
+		HostPresent:  false,
 	}
 	for c := range room.Clients {
 		if strings.EqualFold(c.Username, room.HostUsername) {

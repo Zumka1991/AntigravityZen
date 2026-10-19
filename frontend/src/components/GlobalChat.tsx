@@ -49,7 +49,7 @@ export function GlobalChat({ apiBase, token, username, t, onOpenProfile }: Globa
     let activeRequest: AbortController | null = null;
 
     const fetchMessages = async () => {
-      if (isFetching) return;
+      if (isFetching || document.hidden) return;
       isFetching = true;
       activeRequest = new AbortController();
 
@@ -77,12 +77,20 @@ export function GlobalChat({ apiBase, token, username, t, onOpenProfile }: Globa
       }
     };
 
-    fetchMessages();
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        void fetchMessages();
+      }
+    };
+
+    void fetchMessages();
     const interval = window.setInterval(fetchMessages, 3000);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       isActive = false;
       activeRequest?.abort();
       window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [apiBase, token, t.globalChatLoadError]);
 

@@ -424,6 +424,7 @@ func InitTracks() {
 			log.Printf("Error checking track %s in DB: %v", t.ID, err)
 		}
 	}
+	ensureDefaultTrackAudioFiles(defaultTracks)
 	log.Println("Initialized default tracks in database")
 }
 

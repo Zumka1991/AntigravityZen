@@ -64,7 +64,7 @@ interface Message {
 }
 
 interface MeditationRoomProps {
-  roomState: RoomInfo & { clients: { id: string; username: string; isHost: boolean }[]; status: string; duration: number; startedAt: number; serverTime: number; hostPresent: boolean };
+  roomState: RoomInfo & { hostUsername?: string; clients: { id: string; username: string; isHost: boolean }[]; status: string; duration: number; startedAt: number; serverTime: number; hostPresent: boolean };
   clientId: string;
   username: string;
   tracks: Track[];
@@ -109,6 +109,8 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [chatInput, setChatInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [audioLoadError, setAudioLoadError] = useState(false);
+  const [isZenMode, setIsZenMode] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [breathPhase, setBreathPhase] = useState<'inhale' | 'hold-in' | 'exhale' | 'hold-out'>('inhale');
   const [breathScale, setBreathScale] = useState(1.0);
@@ -121,30 +123,21 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   const [mobilePanel, setMobilePanel] = useState<'members' | 'chat' | null>(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const previousMessageCountRef = useRef(messages.length);
+  const sharedAudioCtxRef = useRef<AudioContext | null>(null);
 
-  const [hasJoinedPractice, setHasJoinedPractice] = useState(false);
-
-  const unlockAudio = () => {
+  const resumeSharedAudioContext = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const dummyCtx = new AudioCtx();
-        if (dummyCtx.state === 'suspended') {
-          dummyCtx.resume();
-        }
+      if (!AudioCtx) return;
+      if (!sharedAudioCtxRef.current || sharedAudioCtxRef.current.state === 'closed') {
+        sharedAudioCtxRef.current = new AudioCtx();
+      }
+      if (sharedAudioCtxRef.current.state === 'suspended') {
+        void sharedAudioCtxRef.current.resume();
       }
     } catch (e) {
-      console.warn("Could not unlock Web Audio API:", e);
+      console.warn('Could not resume Web Audio API:', e);
     }
-    
-    if (roomState.status === 'playing') {
-      forcePlayAudio();
-      if (voiceAudioRef.current) {
-        voiceAudioRef.current.play().catch(e => console.warn("[Voice] unlock play failed:", e));
-      }
-    }
-    
-    setHasJoinedPractice(true);
   };
 
   // Audio Volume States
@@ -819,65 +812,127 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   }, [mobilePanel]);
 
   useEffect(() => {
-    if (!mobilePanel) return;
+    if (!mobilePanel && !isZenMode) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobilePanel(null);
+      if (event.key === 'Escape') {
+        if (mobilePanel) setMobilePanel(null);
+        else if (isZenMode) setIsZenMode(false);
+      }
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [mobilePanel]);
+  }, [mobilePanel, isZenMode]);
+
+  useEffect(() => {
+    if (!isPlaying && isZenMode) {
+      setIsZenMode(false);
+    }
+  }, [isPlaying, isZenMode]);
+
+  const syncAudioPosition = (audio: HTMLAudioElement, startedAt: number) => {
+    if (!startedAt) return;
+    const currentServerTime = Date.now() + serverOffsetRef.current;
+    const elapsedSeconds = Math.max(0, (currentServerTime - startedAt) / 1000);
+    const trackDur = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+    const targetTime = trackDur > 0 ? elapsedSeconds % trackDur : elapsedSeconds;
+    try {
+      if (audio.readyState >= 1) {
+        if (Math.abs(audio.currentTime - targetTime) > 1.0) {
+          audio.currentTime = targetTime;
+        }
+      }
+    } catch {
+      // Setting currentTime before metadata is loaded in Firefox can throw; handled by loadedmetadata
+    }
+  };
 
   // Audio player synchronization
   useEffect(() => {
     const track = roomState.activeTrack;
     if (isPlaying && track) {
-      // Calculate current elapsed time on server using our stable offset
       const currentServerTime = Date.now() + serverOffsetRef.current;
       const elapsedMs = currentServerTime - roomState.startedAt;
       const elapsedSeconds = Math.max(0, elapsedMs / 1000);
 
       if (elapsedSeconds < roomState.duration) {
-        if (!audioRef.current) {
-          audioRef.current = new Audio(track.audioUrl);
-          audioRef.current.loop = true;
-        } else if (audioRef.current.src !== track.audioUrl) {
-          audioRef.current.src = track.audioUrl;
+        setAudioLoadError(false);
+        let audio = audioRef.current;
+        const resolvedUrl = new URL(track.audioUrl, window.location.origin).href;
+        if (!audio) {
+          audio = new Audio();
+          audio.preload = 'auto';
+          audio.loop = true;
+          audio.src = track.audioUrl;
+          audioRef.current = audio;
+        } else if (audio.src !== resolvedUrl && audio.src !== track.audioUrl) {
+          audio.pause();
+          audio.loop = true;
+          audio.src = track.audioUrl;
         }
 
-        audioRef.current.muted = isMuted;
-        audioRef.current.volume = effectiveMusicVolume;
-        audioRef.current.currentTime = elapsedSeconds;
+        audio.muted = isMuted;
+        audio.volume = effectiveMusicVolume;
 
-        // Try to play audio
-        audioRef.current.play()
+        const onLoadedMetadata = () => {
+          syncAudioPosition(audio!, roomState.startedAt);
+        };
+        const onAudioError = () => {
+          console.warn('Track failed to load:', track.audioUrl, audio?.error);
+          setAudioLoadError(true);
+          setAutoplayBlocked(false);
+        };
+
+        audio.addEventListener('loadedmetadata', onLoadedMetadata);
+        audio.addEventListener('error', onAudioError);
+
+        if (audio.readyState >= 1) {
+          syncAudioPosition(audio, roomState.startedAt);
+        }
+
+        audio.play()
           .then(() => {
             setAutoplayBlocked(false);
+            setAudioLoadError(false);
           })
-          .catch((err) => {
-            console.warn('Autoplay blocked:', err);
-            setAutoplayBlocked(true);
+          .catch((err: any) => {
+            const name = err?.name || '';
+            if (name === 'AbortError') {
+              return;
+            }
+            if (name === 'NotSupportedError' || audio?.error) {
+              console.warn('Audio format/source error:', err);
+              setAudioLoadError(true);
+              setAutoplayBlocked(false);
+            } else {
+              console.warn('Autoplay blocked by browser policy:', err);
+              setAutoplayBlocked(true);
+            }
           });
+
+        return () => {
+          audio?.removeEventListener('loadedmetadata', onLoadedMetadata);
+          audio?.removeEventListener('error', onAudioError);
+        };
       } else {
-        // Meditation already finished
         if (audioRef.current) {
           audioRef.current.pause();
         }
       }
     } else {
-      // Not playing
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
       setAutoplayBlocked(false);
+      setAudioLoadError(false);
     }
 
     return () => {
-      if (audioRef.current) {
+      if (audioRef.current && !isPlaying) {
         audioRef.current.pause();
       }
     };
-  }, [isPlaying, roomState.activeTrack?.id, roomState.startedAt, roomState.duration]);
+  }, [isPlaying, roomState.activeTrack?.id, roomState.activeTrack?.audioUrl, roomState.startedAt, roomState.duration]);
 
   // Handle mute/unmute
   useEffect(() => {
@@ -943,22 +998,59 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
   };
 
   const forcePlayAudio = () => {
-    if (audioRef.current && roomState.startedAt) {
-      const currentServerTime = Date.now() + serverOffsetRef.current;
-      const elapsedMs = currentServerTime - roomState.startedAt;
-      const elapsedSeconds = Math.max(0, elapsedMs / 1000);
+    // 1. Unlock/resume shared Web Audio Context directly inside user gesture (critical for Firefox + Bluetooth/wireless headphones)
+    resumeSharedAudioContext();
 
-      try {
-        audioRef.current.load();
-        audioRef.current.currentTime = elapsedSeconds;
-        audioRef.current.play()
-          .then(() => {
-            setAutoplayBlocked(false);
-          })
-          .catch(err => console.error("Force play failed:", err));
-      } catch (err) {
-        console.error("Error reloading and playing audio:", err);
+    // 2. Ensure audio element exists and is unmuted
+    const track = roomState.activeTrack;
+    if (!track) return;
+
+    if (isMuted) {
+      setIsMuted(false);
+    }
+
+    let audio = audioRef.current;
+    if (!audio) {
+      audio = new Audio();
+      audio.preload = 'auto';
+      audio.loop = true;
+      audio.src = track.audioUrl;
+      audioRef.current = audio;
+    } else if (audio.error) {
+      // Only reload if there was an actual media error; calling load() unconditionally in Firefox resets readyState and breaks currentTime + user-gesture play
+      audio.src = track.audioUrl;
+      audio.load();
+    }
+
+    audio.muted = false;
+    audio.volume = effectiveMusicVolume;
+
+    if (roomState.startedAt) {
+      if (audio.readyState >= 1) {
+        syncAudioPosition(audio, roomState.startedAt);
+      } else {
+        const onReady = () => {
+          syncAudioPosition(audio!, roomState.startedAt);
+        };
+        audio.addEventListener('loadedmetadata', onReady, { once: true });
       }
+    }
+
+    audio.play()
+      .then(() => {
+        setAutoplayBlocked(false);
+        setAudioLoadError(false);
+      })
+      .catch((err: any) => {
+        console.error('Force play failed:', err);
+        if (err?.name === 'NotSupportedError' || audio?.error) {
+          setAudioLoadError(true);
+        }
+      });
+
+    // Also resume voice audio if active and paused
+    if (voiceAudioRef.current && voiceAudioRef.current.paused && voiceFileUrl) {
+      voiceAudioRef.current.play().catch(() => {});
     }
   };
 
@@ -974,28 +1066,11 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
     return (t as any)[track.id] || track.title;
   };
 
+  const activeBreathPattern =
+    BREATH_PATTERNS.find((p) => p.id === breathPatternId) ?? BREATH_PATTERNS[0];
+
   return (
-    <div className="room-grid">
-      {!hasJoinedPractice && (
-        <div className="modal-overlay" style={{ zIndex: 110, background: 'rgba(5, 4, 15, 0.85)', backdropFilter: 'blur(25px)' }}>
-          <div className="glass-panel" style={{ padding: '2.5rem', maxWidth: '420px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
-            <div className="brand-icon" style={{ width: '56px', height: '56px', animation: 'pulseLight 1.5s infinite alternate' }} />
-            <div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem', fontFamily: 'var(--font-heading)' }}>
-                {language === 'ru' ? 'Войти в пространство' : 'Enter the Space'}
-              </h2>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                {language === 'ru' 
-                  ? 'Вы подключаетесь к комнате медитации. Нажмите кнопку, чтобы активировать звук и присоединиться к практике.' 
-                  : 'You are joining the meditation room. Click below to enable audio and join the practice.'}
-              </p>
-            </div>
-            <button className="btn btn-primary" onClick={unlockAudio} style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', fontWeight: 700 }}>
-              {language === 'ru' ? 'Войти в практику →' : 'Enter Practice →'}
-            </button>
-          </div>
-        </div>
-      )}
+    <div className={`room-grid${isZenMode ? ' zen-mode' : ''}`}>
       {/* Meditation Center Area */}
       <div className="glass-panel meditation-center">
         {isPlaying && roomState.background && (
@@ -1042,32 +1117,74 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             <div style={{ flex: 1 }} />
           )}
 
-          <button 
-            className="btn btn-primary" 
-            onClick={handleCopyLink} 
-            style={{ 
-              padding: '0.5rem 1rem', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.35rem',
-              background: copied ? 'rgba(45, 212, 191, 0.2)' : 'var(--color-primary)',
-              border: copied ? '1px solid var(--color-secondary)' : 'none',
-              color: copied ? 'var(--color-secondary)' : '#06050e',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            {copied ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {t.linkCopied}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                {t.copyLink}
-              </>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {isPlaying && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsZenMode((prev) => !prev)}
+                title={language === 'ru' ? 'Скрыть боковые панели (Esc — выход)' : 'Hide sidebars (Esc to exit)'}
+                style={{
+                  padding: '0.5rem 0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  borderColor: isZenMode ? 'rgba(45, 212, 191, 0.45)' : undefined,
+                  color: isZenMode ? 'var(--color-secondary)' : undefined,
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {isZenMode ? (
+                    <>
+                      <polyline points="4 14 10 14 10 20" />
+                      <polyline points="20 10 14 10 14 4" />
+                      <line x1="14" y1="10" x2="21" y2="3" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </>
+                  ) : (
+                    <>
+                      <polyline points="15 3 21 3 21 9" />
+                      <polyline points="9 21 3 21 3 15" />
+                      <line x1="21" y1="3" x2="14" y2="10" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </>
+                  )}
+                </svg>
+                <span>
+                  {isZenMode
+                    ? language === 'ru' ? 'Обычный вид' : 'Standard View'
+                    : language === 'ru' ? 'Дзен-режим' : 'Zen Mode'}
+                </span>
+              </button>
             )}
-          </button>
+
+            <button 
+              className="btn btn-primary" 
+              onClick={handleCopyLink} 
+              style={{ 
+                padding: '0.5rem 1rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.35rem',
+                background: copied ? 'rgba(45, 212, 191, 0.2)' : 'var(--color-primary)',
+                border: copied ? '1px solid var(--color-secondary)' : 'none',
+                color: copied ? 'var(--color-secondary)' : '#06050e',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {copied ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  {t.linkCopied}
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                  {t.copyLink}
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Meditation Player Active State */}
@@ -1140,13 +1257,28 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                 );
               })}
             </div>
+            <div className="breath-pattern-hint">
+              <span>{language === 'ru' ? activeBreathPattern.hint.ru : activeBreathPattern.hint.en}</span>
+              <span className="breath-pattern-cycle">
+                {language === 'ru'
+                  ? `Вдох ${activeBreathPattern.inhale}с${activeBreathPattern.holdIn ? ` · Задержка ${activeBreathPattern.holdIn}с` : ''} · Выдох ${activeBreathPattern.exhale}с${activeBreathPattern.holdOut ? ` · Пауза ${activeBreathPattern.holdOut}с` : ''}`
+                  : `Inhale ${activeBreathPattern.inhale}s${activeBreathPattern.holdIn ? ` · Hold ${activeBreathPattern.holdIn}s` : ''} · Exhale ${activeBreathPattern.exhale}s${activeBreathPattern.holdOut ? ` · Hold ${activeBreathPattern.holdOut}s` : ''}`}
+              </span>
+            </div>
 
             {/* Playback Controls Row */}
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
               {/* Mute button */}
               <button
                 className="btn btn-secondary"
-                onClick={() => setIsMuted(!isMuted)}
+                onClick={() => {
+                  resumeSharedAudioContext();
+                  const nextMuted = !isMuted;
+                  setIsMuted(nextMuted);
+                  if (!nextMuted && (autoplayBlocked || audioRef.current?.paused)) {
+                    forcePlayAudio();
+                  }
+                }}
                 style={{ padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '10px' }}
               >
                 {isMuted ? (
@@ -1188,11 +1320,15 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
             </div>
 
             {/* Autoplay Warning Banner */}
-            {autoplayBlocked && (
-              <div className="glass-panel" style={{ padding: '1rem', border: '1px solid var(--color-primary)', background: 'rgba(167, 139, 250, 0.05)', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center', maxWidth: '300px' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 600 }}>{t.audioBlocked}</span>
-                <button className="btn btn-primary" onClick={forcePlayAudio} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: '8px' }}>
-                  {t.enableSoundSync}
+            {(autoplayBlocked || audioLoadError) && (
+              <div className="glass-panel" style={{ padding: '1rem', border: '1px solid var(--color-primary)', background: 'rgba(167, 139, 250, 0.08)', display: 'flex', flexDirection: 'column', gap: '0.55rem', alignItems: 'center', maxWidth: '330px' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 600, textAlign: 'center' }}>
+                  {audioLoadError
+                    ? (language === 'ru' ? 'Не удалось загрузить аудиопоток. Нажмите для повторного подключения:' : 'Audio stream could not be loaded. Click to reconnect:')
+                    : t.audioBlocked}
+                </span>
+                <button className="btn btn-primary" onClick={forcePlayAudio} style={{ padding: '0.5rem 1.1rem', fontSize: '0.85rem', borderRadius: '8px', fontWeight: 700 }}>
+                  🔊 {t.enableSoundSync}
                 </button>
               </div>
             )}
@@ -1316,11 +1452,53 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
         ) : roomState.status === 'finished' ? (
           /* Finished Screen */
           <div className="meditation-start-screen finished-screen">
-            <div className="brand-icon" style={{ width: '64px', height: '64px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }} />
+            <div
+              className="brand-icon"
+              style={{
+                width: '68px',
+                height: '68px',
+                marginBottom: '1rem',
+                background: 'linear-gradient(135deg, rgba(45, 212, 191, 0.25), rgba(167, 139, 250, 0.25))',
+                border: '1px solid rgba(45, 212, 191, 0.45)',
+                boxShadow: '0 0 32px rgba(45, 212, 191, 0.25)',
+              }}
+            />
             <h2>{t.meditationFinishedTitle}</h2>
-            <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', fontSize: '0.95rem', margin: '1.5rem 0', maxWidth: '360px', lineHeight: '1.6' }}>
+            <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', fontSize: '0.95rem', margin: '1rem 0 1.75rem', maxWidth: '380px', lineHeight: '1.6' }}>
               {t.meditationFinishedDescription}
             </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
+              {roomState.hostUsername && roomState.hostUsername !== username && onOpenProfile && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => onOpenProfile(roomState.hostUsername!)}
+                  style={{ borderColor: 'rgba(244, 114, 182, 0.4)', color: '#f472b6' }}
+                >
+                  ♥ {language === 'ru' ? `Поблагодарить ${roomState.hostUsername}` : `Thank ${roomState.hostUsername}`}
+                </button>
+              )}
+              {isHost && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    resumeSharedAudioContext();
+                    const voiceTrackParam = (selectedVoiceTrackId === 'live' || selectedVoiceTrackId === 'none') ? undefined : selectedVoiceTrackId;
+                    onStartMeditation(selectedTrackId, selectedDuration, voiceTrackParam);
+                  }}
+                >
+                  {language === 'ru' ? 'Начать ещё раз' : 'Start Again'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onLeaveRoom}
+              >
+                {language === 'ru' ? 'Вернуться в зал' : 'Return to Lobby'}
+              </button>
+            </div>
           </div>
         ) : (
           /* Lobby / Meditation Config Screen */
@@ -1432,6 +1610,7 @@ export const MeditationRoom: React.FC<MeditationRoomProps> = ({
                   <button
                     className="btn btn-primary"
                     onClick={() => {
+                      resumeSharedAudioContext();
                       const voiceTrackParam = (selectedVoiceTrackId === 'live' || selectedVoiceTrackId === 'none') ? undefined : selectedVoiceTrackId;
                       onStartMeditation(selectedTrackId, selectedDuration, voiceTrackParam);
                     }}

@@ -110,9 +110,14 @@ export function EventPlanner({
   }, [now, t.eventLocale, timeZone]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    if (events.length === 0) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        setNow(Date.now());
+      }
+    }, 1_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [events.length]);
 
   const pageSize = 3;
   const currentEvents = events;

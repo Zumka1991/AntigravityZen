@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-: "${DEPLOY_HOST:?Set DEPLOY_HOST, for example root@203.0.113.10}"
-
+DEPLOY_HOST="${DEPLOY_HOST:-root@191.215.45.93}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/zenworld}"
 DOMAIN="${DOMAIN:-zenworld.ru}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,6 +56,8 @@ else
   fi
 fi
 
+docker network inspect edge >/dev/null 2>&1 || docker network create edge
+
 SQLITE_VOLUME=zenworld_backend_data
 if docker volume inspect "$SQLITE_VOLUME" >/dev/null 2>&1 \
   && docker run --rm -v "$SQLITE_VOLUME:/data:ro" alpine test -f /data/meditation.db; then
@@ -74,6 +75,13 @@ fi
 
 docker compose pull
 docker compose up -d --remove-orphans --wait --wait-timeout 180
+
+if [[ -d /opt/edge/sites ]]; then
+  install -m 0644 "$DEPLOY_DIR/Caddyfile" "/opt/edge/sites/${DOMAIN}.caddy"
+  docker compose -f /opt/edge/compose.yaml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
+  docker compose -f /opt/edge/compose.yaml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+fi
+
 docker image prune -f
 docker compose ps
 REMOTE
