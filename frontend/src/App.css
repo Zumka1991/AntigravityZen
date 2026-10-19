@@ -1250,42 +1250,8 @@
   flex-shrink: 0;
 }
 
-.lobby-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 370px;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.lobby-primary-column {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  min-width: 0;
-}
-
-.lobby-chat-column {
-  position: sticky;
-  top: 1.25rem;
-  min-width: 0;
-}
-
-.lobby-chat-column .global-chat {
-  margin-top: 0;
-}
-
-.lobby-chat-column .global-chat-messages {
-  max-height: clamp(320px, calc(100vh - 300px), 540px);
-}
-
-@media (max-width: 1120px) {
-  .lobby-main-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .lobby-chat-column {
-    position: static;
-  }
+#lobby-schedule-section {
+  margin-top: 2.25rem;
 }
 
 /* Room card backdrop & playing progress bar */

@@ -1528,52 +1528,45 @@ function App() {
               </div>
             </section>
 
-            <div className="lobby-main-grid">
-              <div className="lobby-primary-column">
-                <RoomList
-                  rooms={rooms}
-                  tracks={tracks}
-                  backgrounds={backgrounds}
-                  onJoinRoom={handleJoinRoom}
-                  onCreateRoom={handleCreateRoom}
-                  requestedRoomId={requestedRoomId}
-                  onRequestedRoomHandled={() => {
-                    setRequestedRoomId(null);
-                    clearInvitationTarget('roomId');
-                  }}
-                  openCreateTrigger={openCreateRoomTrigger}
-                  t={t}
-                />
-                <div id="lobby-schedule-section">
-                  <EventPlanner
-                    events={events}
-                    tracks={tracks}
-                    backgrounds={backgrounds}
-                    username={username}
-                    onCreate={handleCreateEvent}
-                    onAttendance={handleEventAttendance}
-                    onDelete={handleDeleteEvent}
-                    onEnter={handleJoinRoom}
-                    requestedEventId={requestedEventId}
-                    onRequestedEventHandled={() => {
-                      setRequestedEventId(null);
-                      clearInvitationTarget('eventId');
-                    }}
-                    t={t}
-                  />
-                </div>
-              </div>
-
-              <aside className="lobby-chat-column">
-                <GlobalChat
-                  apiBase={API_BASE}
-                  token={token}
-                  username={username}
-                  t={t}
-                  onOpenProfile={openProfileCard}
-                />
-              </aside>
+            <RoomList
+              rooms={rooms}
+              tracks={tracks}
+              backgrounds={backgrounds}
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              requestedRoomId={requestedRoomId}
+              onRequestedRoomHandled={() => {
+                setRequestedRoomId(null);
+                clearInvitationTarget('roomId');
+              }}
+              openCreateTrigger={openCreateRoomTrigger}
+              t={t}
+            />
+            <div id="lobby-schedule-section">
+              <EventPlanner
+                events={events}
+                tracks={tracks}
+                backgrounds={backgrounds}
+                username={username}
+                onCreate={handleCreateEvent}
+                onAttendance={handleEventAttendance}
+                onDelete={handleDeleteEvent}
+                onEnter={handleJoinRoom}
+                requestedEventId={requestedEventId}
+                onRequestedEventHandled={() => {
+                  setRequestedEventId(null);
+                  clearInvitationTarget('eventId');
+                }}
+                t={t}
+              />
             </div>
+            <GlobalChat
+              apiBase={API_BASE}
+              token={token}
+              username={username}
+              t={t}
+              onOpenProfile={openProfileCard}
+            />
           </>
         )}
       </main>
